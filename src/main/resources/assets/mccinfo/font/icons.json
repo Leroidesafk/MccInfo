@@ -1,0 +1,211 @@
+{
+  "providers": [
+    {
+      "type": "bitmap",
+      "file": "mccinfo:gui/summer2026/white.png",
+      "ascent": 8,
+      "height": 8,
+      "chars": [
+        ""
+      ]
+    },
+    {
+      "type": "bitmap",
+      "file": "mccinfo:gui/summer2026/red.png",
+      "ascent": 8,
+      "height": 8,
+      "chars": [
+        ""
+      ]
+    },
+    {
+      "type": "bitmap",
+      "file": "mccinfo:gui/summer2026/orange.png",
+      "ascent": 8,
+      "height": 8,
+      "chars": [
+        ""
+      ]
+    },
+    {
+      "type": "bitmap",
+      "file": "mccinfo:gui/summer2026/yellow.png",
+      "ascent": 8,
+      "height": 8,
+      "chars": [
+        ""
+      ]
+    },
+    {
+      "type": "bitmap",
+      "file": "mccinfo:gui/summer2026/green.png",
+      "ascent": 8,
+      "height": 8,
+      "chars": [
+        ""
+      ]
+    },
+    {
+      "type": "bitmap",
+      "file": "mccinfo:gui/summer2026/blue.png",
+      "ascent": 8,
+      "height": 8,
+      "chars": [
+        ""
+      ]
+    },
+    {
+      "type": "bitmap",
+      "file": "mccinfo:gui/summer2026/purple.png",
+      "ascent": 8,
+      "height": 8,
+      "chars": [
+        ""
+      ]
+    },
+    {
+      "type": "bitmap",
+      "file": "mccinfo:gui/summer2026/pink.png",
+      "ascent": 8,
+      "height": 8,
+      "chars": [
+        ""
+      ]
+    },
+    {
+      "type": "bitmap",
+      "file": "mcc:_fonts/icon/fishing_perk/strong_hook.png",
+      "ascent": 8,
+      "height": 8,
+      "chars": [
+        ""
+      ]
+    },
+    {
+      "type": "bitmap",
+      "file": "mcc:_fonts/icon/fishing_perk/wise_hook.png",
+      "ascent": 8,
+      "height": 8,
+      "chars": [
+        ""
+      ]
+    },
+    {
+      "type": "bitmap",
+      "file": "mcc:_fonts/icon/fishing_perk/glimmering_hook.png",
+      "ascent": 8,
+      "height": 8,
+      "chars": [
+        ""
+      ]
+    },
+    {
+      "type": "bitmap",
+      "file": "mcc:_fonts/icon/fishing_perk/greedy_hook.png",
+      "ascent": 8,
+      "height": 8,
+      "chars": [
+        ""
+      ]
+    },
+    {
+      "type": "bitmap",
+      "file": "mcc:_fonts/icon/fishing_perk/lucky_hook.png",
+      "ascent": 8,
+      "height": 8,
+      "chars": [
+        ""
+      ]
+    },
+    {
+      "type": "bitmap",
+      "file": "mcc:_fonts/icon/fishing_perk/xp_magnet.png",
+      "ascent": 8,
+      "height": 8,
+      "chars": [
+        ""
+      ]
+    },
+    {
+      "type": "bitmap",
+      "file": "mcc:_fonts/icon/fishing_perk/fish_magnet.png",
+      "ascent": 8,
+      "height": 8,
+      "chars": [
+        ""
+      ]
+    },
+    {
+      "type": "bitmap",
+      "file": "mcc:_fonts/icon/fishing_perk/pearl_magnet.png",
+      "ascent": 8,
+      "height": 8,
+      "chars": [
+        ""
+      ]
+    },
+    {
+      "type": "bitmap",
+      "file": "mcc:_fonts/icon/fishing_perk/treasure_magnet.png",
+      "ascent": 8,
+      "height": 8,
+      "chars": [
+        ""
+      ]
+    },
+    {
+      "type": "bitmap",
+      "file": "mcc:_fonts/icon/fishing_perk/spirit_magnet.png",
+      "ascent": 8,
+      "height": 8,
+      "chars": [
+        ""
+      ]
+    },
+    {
+      "type": "bitmap",
+      "file": "mcc:_fonts/icon/fishing_perk/anglr_lure_strong.png",
+      "ascent": 8,
+      "height": 8,
+      "chars": [
+        ""
+      ]
+    },
+    {
+      "type": "bitmap",
+      "file": "mcc:_fonts/icon/fishing_perk/anglr_lure_wise.png",
+      "ascent": 8,
+      "height": 8,
+      "chars": [
+        ""
+      ]
+    },
+    {
+      "type": "bitmap",
+      "file": "mcc:_fonts/icon/fishing_perk/anglr_lure_glimmering.png",
+      "ascent": 8,
+      "height": 8,
+      "chars": [
+        ""
+      ]
+    },
+    {
+      "type": "bitmap",
+      "file": "mcc:_fonts/icon/fishing_perk/anglr_lure_greedy.png",
+      "ascent": 8,
+      "height": 8,
+      "chars": [
+        ""
+      ]
+    },
+    {
+      "type": "bitmap",
+      "file": "mcc:_fonts/icon/fishing_perk/anglr_lure_lucky.png",
+      "ascent": 8,
+      "height": 8,
+      "chars": [
+        ""
+      ]
+    }
+  ]
+}

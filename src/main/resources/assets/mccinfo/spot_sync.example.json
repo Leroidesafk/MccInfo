@@ -1,0 +1,5 @@
+{
+  "_comment": "Copy this file to spot_sync.json to connect to a relay (sync-server). url: WebSocket address, e.g. wss://host:port; empty = no relay. pin: SHA-256 (base64) of the relay TLS public key, printed by the relay on start; empty = certificate checked by the usual authorities.",
+  "url": "",
+  "pin": ""
+}

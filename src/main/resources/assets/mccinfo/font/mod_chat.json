@@ -1,0 +1,23 @@
+{
+  "providers": [
+    {
+      "type": "space",
+      "advances": {
+        "\ue010": 9
+      }
+    },
+    {
+      "type": "bitmap",
+      "file": "mccinfo:gui/ui/icons.png",
+      "ascent": 7,
+      "height": 8,
+      "chars": [
+        "\u0000\u0000\u0000\u0000\u0000",
+        "\u0000\u0000\u0000\u0000\ue003",
+        "\u0000\ue000\ue001\ue002\u0000",
+        "\u0000\u0000\u0000\u0000\u0000",
+        "\u0000\u0000\u0000\u0000\u0000"
+      ]
+    }
+  ]
+}

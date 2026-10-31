@@ -1,0 +1,180 @@
+{
+  "targets": {
+    "vanilla": {},
+    "vanilla_swap": {},
+    "spots": {},
+    "spots_swap": {}
+  },
+  "passes": [
+    {
+      "vertex_shader": "minecraft:core/screenquad",
+      "fragment_shader": "mccinfo:post/glow_split",
+      "inputs": [
+        {
+          "sampler_name": "In",
+          "target": "minecraft:entity_outline"
+        }
+      ],
+      "output": "vanilla",
+      "uniforms": {
+        "SplitConfig": [
+          {
+            "name": "Spots",
+            "type": "float",
+            "value": 0.0
+          }
+        ]
+      }
+    },
+    {
+      "vertex_shader": "minecraft:core/screenquad",
+      "fragment_shader": "minecraft:post/entity_sobel",
+      "inputs": [
+        {
+          "sampler_name": "In",
+          "target": "vanilla"
+        }
+      ],
+      "output": "vanilla_swap"
+    },
+    {
+      "vertex_shader": "minecraft:core/screenquad",
+      "fragment_shader": "minecraft:post/entity_outline_box_blur",
+      "inputs": [
+        {
+          "sampler_name": "In",
+          "target": "vanilla_swap",
+          "bilinear": true
+        }
+      ],
+      "output": "vanilla",
+      "uniforms": {
+        "BlurConfig": [
+          {
+            "name": "BlurDir",
+            "type": "vec2",
+            "value": [
+              1.0,
+              0.0
+            ]
+          },
+          {
+            "name": "Radius",
+            "type": "float",
+            "value": 2.0
+          }
+        ]
+      }
+    },
+    {
+      "vertex_shader": "minecraft:core/screenquad",
+      "fragment_shader": "minecraft:post/entity_outline_box_blur",
+      "inputs": [
+        {
+          "sampler_name": "In",
+          "target": "vanilla",
+          "bilinear": true
+        }
+      ],
+      "output": "vanilla_swap",
+      "uniforms": {
+        "BlurConfig": [
+          {
+            "name": "BlurDir",
+            "type": "vec2",
+            "value": [
+              0.0,
+              1.0
+            ]
+          },
+          {
+            "name": "Radius",
+            "type": "float",
+            "value": 2.0
+          }
+        ]
+      }
+    },
+    {
+      "vertex_shader": "minecraft:core/screenquad",
+      "fragment_shader": "mccinfo:post/glow_split",
+      "inputs": [
+        {
+          "sampler_name": "In",
+          "target": "minecraft:entity_outline"
+        }
+      ],
+      "output": "spots",
+      "uniforms": {
+        "SplitConfig": [
+          {
+            "name": "Spots",
+            "type": "float",
+            "value": 1.0
+          }
+        ]
+      }
+    },
+    {
+      "vertex_shader": "minecraft:core/screenquad",
+      "fragment_shader": "mccinfo:post/spot_glow",
+      "inputs": [
+        {
+          "sampler_name": "In",
+          "target": "spots"
+        }
+      ],
+      "output": "spots_swap",
+      "uniforms": {
+        "BlurConfig": [
+          {
+            "name": "BlurDir",
+            "type": "vec2",
+            "value": [
+              1.0,
+              0.0
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "vertex_shader": "minecraft:core/screenquad",
+      "fragment_shader": "mccinfo:post/spot_glow",
+      "inputs": [
+        {
+          "sampler_name": "In",
+          "target": "spots_swap"
+        }
+      ],
+      "output": "spots",
+      "uniforms": {
+        "BlurConfig": [
+          {
+            "name": "BlurDir",
+            "type": "vec2",
+            "value": [
+              0.0,
+              1.0
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "vertex_shader": "minecraft:core/screenquad",
+      "fragment_shader": "mccinfo:post/glow_merge",
+      "inputs": [
+        {
+          "sampler_name": "Vanilla",
+          "target": "vanilla_swap"
+        },
+        {
+          "sampler_name": "Spots",
+          "target": "spots"
+        }
+      ],
+      "output": "minecraft:entity_outline"
+    }
+  ]
+}

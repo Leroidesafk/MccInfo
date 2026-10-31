@@ -1,0 +1,126 @@
+plugins {
+	id 'net.fabricmc.fabric-loom' version "${loom_version}"
+}
+
+repositories {
+	maven {
+		name = "Terraformers"
+		url = "https://maven.terraformersmc.com/releases/"
+		content {
+			includeGroup "com.terraformersmc"
+		}
+	}
+	maven {
+		name = "Noxcrew"
+		url = "https://maven.noxcrew.com/public"
+		content {
+			includeGroup "com.noxcrew.noxesium"
+		}
+	}
+}
+
+loom {
+	splitEnvironmentSourceSets()
+
+	mods {
+		"mccinfo" {
+			sourceSet sourceSets.main
+			sourceSet sourceSets.client
+		}
+	}
+}
+
+ext.jarVersion = project.version.toString()
+ext.updateJars = [tasks.named('jar')]
+
+if (file('custom/custom.gradle').exists()) {
+	apply from: 'custom/custom.gradle'
+}
+
+dependencies {
+	minecraft "com.mojang:minecraft:${project.minecraft_version}"
+	implementation "net.fabricmc:fabric-loader:${project.loader_version}"
+
+	implementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_api_version}"
+
+	clientCompileOnly("com.terraformersmc:modmenu:${project.modmenu_version}") {
+		transitive = false
+	}
+	clientCompileOnly("com.noxcrew.noxesium:fabric:${project.noxesium_version}") {
+		transitive = false
+	}
+	clientCompileOnly("com.noxcrew.noxesium:api:${project.noxesium_version}") {
+		transitive = false
+	}
+}
+
+processResources {
+	def version = project.jarVersion
+	inputs.property "version", version
+
+	exclude "assets/mccinfo/spot_sync.example.json"
+
+	filesMatching("fabric.mod.json") {
+		expand "version": version
+	}
+}
+
+tasks.withType(JavaCompile).configureEach {
+	it.options.release = 25
+}
+
+java {
+	withSourcesJar()
+
+	sourceCompatibility = JavaVersion.VERSION_25
+	targetCompatibility = JavaVersion.VERSION_25
+}
+
+def updateKeyFile = file(findProperty('update_signing_key') ?: "${System.getProperty('user.home')}/.mccfishheart/update-signing-key.pem")
+
+tasks.register('generateUpdateKey') {
+	group = 'mccinfo'
+	description = 'Crée la clé Ed25519 qui signe les mises à jour (hors du projet) et affiche la clé publique à mettre dans ModUpdater.'
+	doLast {
+		def publicFile = file("${updateKeyFile}.pub")
+		if (!updateKeyFile.exists()) {
+			def pair = java.security.KeyPairGenerator.getInstance('Ed25519').generateKeyPair()
+			updateKeyFile.parentFile.mkdirs()
+			updateKeyFile.text = "-----BEGIN PRIVATE KEY-----\n" + Base64.getMimeEncoder(64, "\n".bytes).encodeToString(pair.private.encoded) + "\n-----END PRIVATE KEY-----\n"
+			publicFile.text = Base64.encoder.encodeToString(pair.public.encoded) + "\n"
+			logger.lifecycle("Clé créée : ${updateKeyFile}")
+		}
+		logger.lifecycle("Clé publique : " + publicFile.text.trim())
+	}
+}
+
+tasks.register('signUpdate') {
+	group = 'mccinfo'
+	description = 'Signe les jars du mod pour la mise à jour automatique (écrit les .sig à déposer avec les jars).'
+	dependsOn project.updateJars
+	def jarFiles = project.updateJars.collect { task -> task.flatMap { it.archiveFile } }
+	def modVersion = project.version.toString()
+	onlyIf {
+		if (!updateKeyFile.exists()) {
+			logger.warn("Jars non signés : clé ${updateKeyFile} absente (gradlew generateUpdateKey)")
+		}
+		updateKeyFile.exists()
+	}
+	doLast {
+		def privateKey = java.security.KeyFactory.getInstance('Ed25519').generatePrivate(new java.security.spec.PKCS8EncodedKeySpec(
+				Base64.mimeDecoder.decode(updateKeyFile.text.replaceAll('-----[A-Z ]+-----', ''))))
+		jarFiles.each { provider ->
+			def jar = provider.get().asFile
+			def sha256 = java.util.HexFormat.of().formatHex(java.security.MessageDigest.getInstance('SHA-256').digest(jar.bytes))
+			def signer = java.security.Signature.getInstance('Ed25519')
+			signer.initSign(privateKey)
+			signer.update("mccfishheart-update\n${modVersion}\n${sha256}".getBytes('UTF-8'))
+			file("${jar}.sig").text = Base64.encoder.encodeToString(signer.sign()) + "\n"
+			logger.lifecycle("Jar signé : ${jar}.sig")
+		}
+	}
+}
+
+tasks.named('build') {
+	finalizedBy 'signUpdate'
+}

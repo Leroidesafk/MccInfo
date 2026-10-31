@@ -1,0 +1,48 @@
+{
+	"schemaVersion": 1,
+	"id": "mccinfo",
+	"version": "${version}",
+	"name": "MccInfo",
+	"description": "Utility mod for MCC Island.",
+	"authors": [
+		"Leroidesafk"
+	],
+	"license": "All-Rights-Reserved",
+	"icon": "assets/mccinfo/icon.png",
+	"environment": "client",
+	"entrypoints": {
+		"main": [
+			"leroidesafk.mccinfo.Mccinfo"
+		],
+		"client": [
+			"leroidesafk.mccinfo.client.MccinfoClient"
+		],
+		"modmenu": [
+			"leroidesafk.mccinfo.client.ModMenuIntegration"
+		]
+	},
+	"mixins": [
+		{
+			"config": "mccinfo.client.mixins.json",
+			"environment": "client"
+		}
+	],
+	"suggests": {
+		"voicechat": ">=2.6.22"
+	},
+	"breaks": {
+		"mccfishheart": "*"
+	},
+	"depends": {
+		"fabricloader": ">=0.19.3",
+		"minecraft": "~26.2",
+		"java": ">=25",
+		"fabric-api": ">=0.157.0",
+		"noxesium": ">=3.2.3"
+	},
+	"custom": {
+		"modmenu": {
+			"badges": [ "client" ]
+		}
+	}
+}

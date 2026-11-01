@@ -48,12 +48,12 @@ public final class NeuCrafts {
 	}
 
 	// Craft type icon
-	record Icon(String item, Identifier texture) {
+	record Icon(String item, Identifier texture, Identifier model) {
 	}
 
 	// Chest layout of a craft type
 	public record Layout(String type, String title, JsonElement titleComponent, int size, List<Integer> slots, List<Fixed> fixed, Fixed previous, Fixed next,
-			Icon icon, String npc) {
+			Icon icon, List<String> npcs) {
 	}
 
 	// Price of an item
@@ -124,6 +124,7 @@ public final class NeuCrafts {
 		}
 	}
 
+	// Layout of a craft type or a vendor
 	private static Layout readLayout(String type, JsonObject object) {
 		List<Integer> slots = new ArrayList<>();
 		if (object.has("slots") && object.get("slots").isJsonArray()) {
@@ -139,8 +140,14 @@ public final class NeuCrafts {
 		int size = object.has("size") ? object.get("size").getAsInt() : 54;
 		Fixed previous = object.has("previous") && object.get("previous").isJsonObject() ? fixed(object.getAsJsonObject("previous")) : null;
 		Fixed next = object.has("next") && object.get("next").isJsonObject() ? fixed(object.getAsJsonObject("next")) : null;
+		List<String> npcs = new ArrayList<>();
+		if (object.has("npcs") && object.get("npcs").isJsonArray()) {
+			object.getAsJsonArray("npcs").forEach(npc -> npcs.add(npc.getAsString()));
+		} else if (object.has("npc") && object.get("npc").isJsonPrimitive()) {
+			npcs.add(object.get("npc").getAsString());
+		}
 		return new Layout(type, title, object.get("titleComponent"), size, List.copyOf(slots), List.copyOf(fixed), previous, next, icon(object),
-				object.has("npc") && object.get("npc").isJsonPrimitive() ? object.get("npc").getAsString() : null);
+				List.copyOf(npcs));
 	}
 
 	private static Icon icon(JsonObject layout) {
@@ -151,15 +158,36 @@ public final class NeuCrafts {
 		if (icon.has("texture")) {
 			String texture = icon.get("texture").getAsString();
 			Identifier id = Identifier.tryParse(texture.contains(":") ? texture : Mccinfo.MOD_ID + ":textures/gui/recipes/" + texture + ".png");
-			return id == null ? null : new Icon(null, id);
+			return id == null ? null : new Icon(null, id, null);
 		}
-		return icon.has("item") ? new Icon(icon.get("item").getAsString(), null) : null;
+		if (icon.has("model")) {
+			Identifier model = Identifier.tryParse(icon.get("model").getAsString());
+			return model == null ? null : new Icon(null, null, model);
+		}
+		return icon.has("item") ? new Icon(icon.get("item").getAsString(), null, null) : null;
+	}
+
+	// Icon as an item
+	static ItemStack iconStack(Icon icon) {
+		if (icon == null) {
+			return null;
+		}
+		if (icon.item() != null) {
+			return NeuItems.stack(icon.item());
+		}
+		if (icon.model() != null) {
+			ItemStack stack = new ItemStack(Items.PAPER);
+			stack.set(DataComponents.ITEM_MODEL, icon.model());
+			return stack;
+		}
+		return null;
 	}
 
 	private static Fixed fixed(JsonObject entry) {
 		return new Fixed(entry.get("slot").getAsInt(), entry.get("item"));
 	}
 
+	// One craft and its rewards
 	private static void readCraft(JsonObject object) {
 		List<Reward> rewards = new ArrayList<>();
 		if (object.has("items") && object.get("items").isJsonArray()) {
@@ -300,6 +328,7 @@ public final class NeuCrafts {
 		return craft.layout() != null ? craft.layout() : LAYOUTS.get(craft.type());
 	}
 
+	// Menu title
 	static Component title(Layout layout) {
 		RegistryOps<JsonElement> ops = ops();
 		if (ops != null && layout.titleComponent() != null) {
@@ -368,6 +397,7 @@ public final class NeuCrafts {
 		return stack;
 	}
 
+	// Recipe and cost lines
 	private static Component timeLine(String time) {
 		return Component.empty().withStyle(style -> style.withColor(VALUE_COLOR).withItalic(false))
 				.append(Component.literal("Crafting Time:").withStyle(style -> style.withColor(CRAFT_LABEL_COLOR))).append(" " + time);

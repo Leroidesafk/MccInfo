@@ -28,8 +28,10 @@ import java.util.function.IntConsumer;
 import java.util.function.Supplier;
 
 public final class SettingsPanel {
-	// Panel size, always 2 screen pixels per unit
-	private static final int TARGET_SCALE = 2;
+	// Menu scale
+	private static final int MIN_SCREEN_WIDTH = 480;
+	private static final int MIN_SCREEN_HEIGHT = 300;
+	private static final float BASE_SCALE = 2.0F / 3.0F;
 	static final int MAX_WIDTH = 600;
 	static final int MAX_HEIGHT = 408;
 	private static final int BORDER = 3;
@@ -319,10 +321,11 @@ public final class SettingsPanel {
 		this.focus = focus;
 	}
 
-	// Scale of the menu for the current GUI scale
+	// Menu scale for the current GUI Scale
 	public static float uiScale() {
-		int guiScale = Minecraft.getInstance().getWindow().getGuiScale();
-		return guiScale > TARGET_SCALE ? (float) TARGET_SCALE / guiScale : 1.0F;
+		var window = Minecraft.getInstance().getWindow();
+		float fit = Math.min(window.getGuiScaledWidth() / (float) MIN_SCREEN_WIDTH, window.getGuiScaledHeight() / (float) MIN_SCREEN_HEIGHT);
+		return Math.min(BASE_SCALE, fit);
 	}
 
 	static int width(int screenWidth) {

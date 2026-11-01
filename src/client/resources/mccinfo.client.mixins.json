@@ -46,7 +46,10 @@
 		"chat.ChatIndicatorMixin",
 		"accessor.ChatScreenAccessor",
 		"chat.ModChatLineMixin",
-		"chat.ChatItemTooltipMixin"
+		"chat.ChatItemTooltipMixin",
+		"emote.SoundBufferLibraryMixin",
+		"emote.PlayerModelEmoteMixin",
+		"emote.ArmorStandEmoteMixin"
 	],
 	"injectors": {
 		"defaultRequire": 1

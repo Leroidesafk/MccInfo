@@ -40,6 +40,7 @@ import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.BubbleColumnBlock;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.material.FluidState;
+import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.phys.Vec3;
 import net.minecraft.world.phys.shapes.VoxelShape;
 import com.mojang.blaze3d.vertex.PoseStack;
@@ -132,9 +133,18 @@ public final class SpotPath {
 
 	private static final int[][] DIRECTIONS = {{1, 0}, {-1, 0}, {0, 1}, {0, -1}, {1, 1}, {1, -1}, {-1, 1}, {-1, -1}};
 
-	record Target(Vec3 position, int color, Identifier icon) {
+	// Path target and its icon
+	record Target(Vec3 position, int color, Identifier icon, ItemStack item) {
 		Target(Vec3 position, int color) {
-			this(position, color, null);
+			this(position, color, null, null);
+		}
+
+		Target(Vec3 position, int color, Identifier icon) {
+			this(position, color, icon, null);
+		}
+
+		boolean hasIcon() {
+			return this.icon != null || this.item != null && !this.item.isEmpty();
 		}
 	}
 
@@ -155,10 +165,12 @@ public final class SpotPath {
 	private record Node(long position, double cost, double estimate) {
 	}
 
+	// Targets and the focused one
 	private static final List<Function<Vec3, Target>> TARGETS = new CopyOnWriteArrayList<>();
 	private static Target focus;
 	private static ClientLevel focusLevel;
 
+	// Current path
 	private static Search search;
 	private static List<Vec3> path = List.of();
 	private static Vec3 pathTarget;
@@ -169,12 +181,14 @@ public final class SpotPath {
 	private static boolean visible;
 	private static float opacity;
 	private static long lastFrameNanos;
+	// Hovered markers and text displays
 	private static final long HOVER_FORGET_NANOS = 1_000_000_000L;
 	private static final Map<Vec3, Hover> HOVERS = new HashMap<>();
 	private static final float DISPLAY_LINE_HEIGHT = 10.0F;
 	private static final float DISPLAY_PIXEL = 0.025F;
 	private static final Map<BlockPos, DisplayBox> DISPLAY_BOXES = new HashMap<>();
 	private static final Map<BlockPos, Hover> DISPLAY_HOVERS = new HashMap<>();
+	// Marker looked at
 	private static Target lookedTarget;
 	private static Vec3 lookedPosition;
 	private static long lookedAtNanos;
@@ -204,7 +218,7 @@ public final class SpotPath {
 
 	private static void extractWaypoint(GuiGraphicsExtractor graphics, DeltaTracker deltaTracker) {
 		Target target = focus;
-		if (target == null || target.icon() == null || !canFocus() || Minecraft.getInstance().level != focusLevel) {
+		if (target == null || !target.hasIcon() || !canFocus() || Minecraft.getInstance().level != focusLevel) {
 			return;
 		}
 		SpotMarkers.Projection projection = SpotMarkers.projection();
@@ -215,8 +229,12 @@ public final class SpotPath {
 			g.pose().pushMatrix();
 			g.pose().translate(-WAYPOINT_ICON_SIZE / 2.0F, -WAYPOINT_ICON_SIZE - 1.0F);
 			g.pose().scale(WAYPOINT_ICON_SIZE / (float) WAYPOINT_ICON_TEXTURE, WAYPOINT_ICON_SIZE / (float) WAYPOINT_ICON_TEXTURE);
-			g.blit(RenderPipelines.GUI_TEXTURED, target.icon(), 0, 0, 0.0F, 0.0F, WAYPOINT_ICON_TEXTURE, WAYPOINT_ICON_TEXTURE, WAYPOINT_ICON_TEXTURE,
-					WAYPOINT_ICON_TEXTURE, OverlayStyle.withAlpha(0xFFFFFFFF, alpha));
+			if (target.icon() != null) {
+				g.blit(RenderPipelines.GUI_TEXTURED, target.icon(), 0, 0, 0.0F, 0.0F, WAYPOINT_ICON_TEXTURE, WAYPOINT_ICON_TEXTURE, WAYPOINT_ICON_TEXTURE,
+						WAYPOINT_ICON_TEXTURE, OverlayStyle.withAlpha(0xFFFFFFFF, alpha));
+			} else {
+				g.item(target.item(), 0, 0);
+			}
 			g.pose().popMatrix();
 		});
 	}
@@ -233,8 +251,15 @@ public final class SpotPath {
 		return canFocus() && focus != null && focus.position().equals(position);
 	}
 
+	// Path focus
 	public static void focus(Vec3 position, int color, Identifier icon) {
-		focus = new Target(position, color, icon);
+		focus = new Target(position, color, icon, null);
+		focusLevel = Minecraft.getInstance().level;
+		resetLook();
+	}
+
+	public static void focus(Vec3 position, int color, ItemStack item) {
+		focus = new Target(position, color, null, item);
 		focusLevel = Minecraft.getInstance().level;
 		resetLook();
 	}
@@ -259,6 +284,7 @@ public final class SpotPath {
 		lookedAtNanos = 0L;
 	}
 
+	// Text displays seen this frame
 	public static void recordDisplay(Vec3 anchor, int textWidth, int lines, float scaleX, float scaleY, float offsetY) {
 		if (!tracksDisplays()) {
 			return;
@@ -315,12 +341,13 @@ public final class SpotPath {
 	}
 
 	private static Vec3 markerPosition(Target target) {
-		return target.icon() != null ? target.position().add(0.0, WAYPOINT_HEIGHT, 0.0) : target.position();
+		return target.hasIcon() ? target.position().add(0.0, WAYPOINT_HEIGHT, 0.0) : target.position();
 	}
 
+	// Marker size with hover and distance
 	static float markerScale(Vec3 position, Target clickTarget, float alpha, double distance, float offsetX, float offsetY, float[] display) {
 		Target target = focus;
-		boolean waypoint = target != null && target.icon() != null && position.equals(markerPosition(target));
+		boolean waypoint = target != null && target.hasIcon() && position.equals(markerPosition(target));
 		Minecraft client = Minecraft.getInstance();
 		if (!canFocus() || client.player == null || !waypoint && (clickTarget == null || clickTarget.position().distanceTo(client.player.position()) <= HIDE_DISTANCE
 				|| !Regions.same(clickTarget.position(), client.player.position()))) {
@@ -370,6 +397,7 @@ public final class SpotPath {
 		return progress * progress * (3.0F - 2.0F * progress);
 	}
 
+	// Right click on the looked marker
 	public static int clickLookedAt() {
 		Minecraft client = Minecraft.getInstance();
 		Target looked = lookedTarget;
@@ -400,6 +428,7 @@ public final class SpotPath {
 		opacity = 0.0F;
 	}
 
+	// Path updates each tick
 	private static void tick(Minecraft client) {
 		long now = net.minecraft.util.Util.getNanos();
 		HOVERS.values().removeIf(hover -> now - hover.frameNanos > HOVER_FORGET_NANOS);
@@ -494,6 +523,7 @@ public final class SpotPath {
 		return first.position().distanceToSqr(from) <= second.position().distanceToSqr(from) ? first : second;
 	}
 
+	// Block the player stands on
 	private static long standingPosition(ClientLevel level, Player player) {
 		Search probe = new Search(level, 0L, Vec3.ZERO);
 		if (player.onGround()) {
@@ -805,6 +835,7 @@ public final class SpotPath {
 		}
 	}
 
+	// Smoothed path points
 	private static List<Vec3> smooth(List<Vec3> points) {
 		for (int pass = 0; pass < SMOOTHING_PASSES; pass++) {
 			List<Vec3> smoothed = new ArrayList<>(points.size() * 2);
@@ -821,6 +852,7 @@ public final class SpotPath {
 		return points;
 	}
 
+	// Path ribbon in the world
 	private static void collectSubmits(LevelRenderContext context) {
 		nextFrame();
 		List<Vec3> points = path;

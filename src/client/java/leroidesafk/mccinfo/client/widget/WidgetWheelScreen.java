@@ -1,5 +1,6 @@
 package leroidesafk.mccinfo.client.widget;
 
+import leroidesafk.mccinfo.client.emote.EmotePreviewRenderer;
 import leroidesafk.mccinfo.client.gui.MenuBackdrop;
 import leroidesafk.mccinfo.client.gui.SettingsPanel;
 import leroidesafk.mccinfo.client.items.NeuItems;
@@ -40,6 +41,8 @@ public final class WidgetWheelScreen extends Screen implements MenuBackdrop.Host
 	private static final int COLOR_TEXT = 0xFFFFFFFF;
 	private static final int COLOR_EMPTY_TEXT = 0xFF8C8C8C;
 
+	// Opening time for emote previews
+	private final long opened = System.nanoTime();
 	private float scale = 1.0F;
 	private int gridLeft;
 	private int gridTop;
@@ -152,12 +155,18 @@ public final class WidgetWheelScreen extends Screen implements MenuBackdrop.Host
 				graphics.fill(x - HOVER_BORDER, y - HOVER_BORDER, x + CELL + HOVER_BORDER, y + CELL + HOVER_BORDER, SettingsPanel.ACCENT);
 			}
 			graphics.fill(x, y, x + CELL, y + CELL, over ? hoverColor() : COLOR_CELL);
-			float size = ICON_TEXTURE * ICON_SCALE;
-			graphics.pose().pushMatrix();
-			graphics.pose().translate(x + (CELL - size) / 2.0F, y + (CELL - size) / 2.0F);
-			graphics.pose().scale(ICON_SCALE, ICON_SCALE);
-			graphics.blit(RenderPipelines.GUI_TEXTURED, widget.icon(), 0, 0, 0.0F, 0.0F, ICON_TEXTURE, ICON_TEXTURE, ICON_TEXTURE, ICON_TEXTURE);
-			graphics.pose().popMatrix();
+			// Emote preview or widget icon
+			if (widget.emote()) {
+				EmotePreviewRenderer.extract(graphics, widget.id(), this.opened, Math.round(x * this.scale), Math.round(y * this.scale),
+						Math.round((x + CELL) * this.scale), Math.round((y + CELL) * this.scale));
+			} else if (widget.icon() != null) {
+				float size = ICON_TEXTURE * ICON_SCALE;
+				graphics.pose().pushMatrix();
+				graphics.pose().translate(x + (CELL - size) / 2.0F, y + (CELL - size) / 2.0F);
+				graphics.pose().scale(ICON_SCALE, ICON_SCALE);
+				graphics.blit(RenderPipelines.GUI_TEXTURED, widget.icon(), 0, 0, 0.0F, 0.0F, ICON_TEXTURE, ICON_TEXTURE, ICON_TEXTURE, ICON_TEXTURE);
+				graphics.pose().popMatrix();
+			}
 			if (over) {
 				tooltip = widget;
 				NeuItems.pointer(graphics);

@@ -51,6 +51,7 @@ public class MccinfoClient implements ClientModInitializer {
 		PatchNoteToast.register();
 		RockPaperScissors.register();
 		leroidesafk.mccinfo.client.widget.Widgets.register();
+		leroidesafk.mccinfo.client.emote.Emotes.register();
 		TravelCommand.register();
 		leroidesafk.mccinfo.client.moderator.ModeratorScreen.register();
 		NeuItems.register();

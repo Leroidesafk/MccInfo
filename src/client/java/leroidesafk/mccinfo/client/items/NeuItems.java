@@ -141,6 +141,7 @@ public final class NeuItems {
 		private ItemStack stack;
 		private boolean decoded;
 		private ItemStack badge;
+		private String rarity;
 
 		private Entry(String id, String name, String lore, JsonElement json, Category category, boolean outdated) {
 			this.id = id;
@@ -650,6 +651,9 @@ public final class NeuItems {
 						entry.badge = new ItemStack(Items.PAPER);
 						entry.badge.set(DataComponents.ITEM_MODEL, badge);
 					}
+					if (item.has("rarity") && item.get("rarity").isJsonPrimitive()) {
+						entry.rarity = item.get("rarity").getAsString().toLowerCase(Locale.ROOT);
+					}
 					if (item.has("costIcon") && item.get("costIcon").isJsonPrimitive()) {
 						COST_ICONS.put(id, item.get("costIcon").getAsString());
 					}
@@ -1123,6 +1127,12 @@ public final class NeuItems {
 	static ItemStack badge(String id) {
 		Entry entry = BY_ID.get(id);
 		return entry == null ? null : entry.badge;
+	}
+
+	// Cosmetic rarity from the relay
+	static String rarity(String id) {
+		Entry entry = id == null ? null : BY_ID.get(id);
+		return entry == null ? null : entry.rarity;
 	}
 
 	private static void plus(GuiGraphicsExtractor graphics, int x, int y, boolean open) {

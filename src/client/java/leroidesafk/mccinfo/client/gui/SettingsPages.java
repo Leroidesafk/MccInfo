@@ -300,6 +300,12 @@ public final class SettingsPages {
 						toggle(() -> config.widgetWaypoints, value -> {
 							config.widgetWaypoints = value;
 							config.save();
+						})),
+				SettingsPanel.Card.of("emote_sounds", text("screen.mccinfo.settings.emote_sounds"),
+						text("screen.mccinfo.settings.emote_sounds.description"),
+						toggle(() -> config.emoteSounds, value -> {
+							config.emoteSounds = value;
+							config.save();
 						})));
 		return new SettingsPanel.Page("widgets", text("screen.mccinfo.settings.widgets"), SettingsPanel.ICON_WIDGETS, List.of(
 				new SettingsPanel.Section(text("screen.mccinfo.settings.widgets"), cards)));

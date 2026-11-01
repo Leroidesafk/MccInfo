@@ -111,9 +111,10 @@ public final class ModConfig {
 	public String keyboardSize;
 	public TransitionWipe.Style transitionStyle = TransitionWipe.Style.DIAMOND;
 
-	// Widgets
+	// Widgets and emotes
 	public boolean widgetDuels = true;
 	public boolean widgetWaypoints = true;
+	public boolean emoteSounds = true;
 
 	// Voice chat notice already shown
 	public boolean voiceDisclaimerSeen;

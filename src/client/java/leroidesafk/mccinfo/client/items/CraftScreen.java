@@ -9,7 +9,9 @@ import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.inventory.ContainerScreen;
 import net.minecraft.client.input.MouseButtonEvent;
+import net.minecraft.ChatFormatting;
 import net.minecraft.client.renderer.RenderPipelines;
+import net.minecraft.core.component.DataComponents;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
 import net.minecraft.world.SimpleContainer;
@@ -20,6 +22,7 @@ import net.minecraft.world.inventory.ContainerInput;
 import net.minecraft.world.inventory.MenuType;
 import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.component.ItemLore;
 import org.lwjgl.glfw.GLFW;
 
 import java.util.ArrayList;
@@ -31,7 +34,6 @@ import java.util.Map;
 import java.util.Set;
 
 public final class CraftScreen extends ContainerScreen {
-	// Chest size and the result on the side
 	private static final int ROW_SIZE = 9;
 	private static final int MAX_ROWS = 6;
 	private static final int TITLE_OVERHANG = 24;
@@ -43,12 +45,19 @@ public final class CraftScreen extends ContainerScreen {
 	private static final int RESULT_SIZE = NeuItems.SQUARE_SIZE * RESULT_SCALE;
 	private static final int NPC_WIDTH = RESULT_SIZE;
 	private static final int NPC_HEIGHT = RESULT_SIZE * 5 / 3;
+	private static final int NPC_ARROW_WIDTH = 14;
 	// Path to the NPC
 	private static final int NPC_PATH_COLOR = 0xFFAA00;
 	private static final Identifier NPC_WAYPOINT_ICON = Mccinfo.id("textures/gui/recipes/vendor.png");
 	// Frame around the searched item
 	private static final Identifier FOCUS_FRAME = Mccinfo.id("textures/gui/recipes/selected.png");
 	private static final int FOCUS_FRAME_SIZE = 20;
+	// Rarity filter button
+	private static final Identifier FILTER_MODEL = Identifier.fromNamespaceAndPath("mcc", "island_interface/generic/filter");
+	private static final String FILTER_MARK = "▪";
+	private static final int FILTER_MARK_COLOR = 0x505050;
+	private static final int FILTER_SELECTED_COLOR = 0xFEE761;
+	private static final int FILTER_OPTION_COLOR = 0x55FF56;
 	private static final String BACK = "back";
 	private static final String EXIT = "exit";
 	private static final List<MenuType<ChestMenu>> TYPES = List.of(MenuType.GENERIC_9x1, MenuType.GENERIC_9x2, MenuType.GENERIC_9x3,
@@ -65,6 +74,10 @@ public final class CraftScreen extends ContainerScreen {
 	private final Map<Integer, NeuCrafts.Reward> bundleSlots;
 	private final Set<Integer> focusSlots;
 	private final Map<Integer, ItemStack> badgeSlots;
+	private final int filter;
+	private final int filterSlot;
+	private final int filterCount;
+	private int npcIndex;
 
 	private record Tab(String type, int left, int top, int right) {
 		private boolean contains(double x, double y) {
@@ -73,9 +86,14 @@ public final class CraftScreen extends ContainerScreen {
 	}
 
 	private CraftScreen(ChestMenu menu, Inventory inventory, Component title, List<NeuCrafts.Craft> crafts, int index, int page, Screen parent,
-			List<String> focus, Set<String> expanded, Map<Integer, NeuCrafts.Reward> bundleSlots, Set<Integer> focusSlots, Map<Integer, ItemStack> badgeSlots) {
+			List<String> focus, Set<String> expanded, Map<Integer, NeuCrafts.Reward> bundleSlots, Set<Integer> focusSlots, Map<Integer, ItemStack> badgeSlots,
+			int filter) {
 		super(menu, inventory, title);
 		this.badgeSlots = badgeSlots;
+		this.filter = filter;
+		NeuCrafts.Fixed filterFixed = filterFixed(NeuCrafts.layout(crafts.get(index)));
+		this.filterSlot = filterFixed == null ? -1 : filterFixed.slot();
+		this.filterCount = filterFixed == null ? 0 : filterOptions(NeuCrafts.decode(filterFixed.item())).size();
 		this.focusSlots = focusSlots;
 		this.expanded = expanded;
 		this.bundleSlots = bundleSlots;
@@ -95,7 +113,86 @@ public final class CraftScreen extends ContainerScreen {
 			crafts.get(index).items().stream().filter(reward -> reward.bundle() != null && reward.contains(target))
 					.forEach(reward -> expanded.add(reward.bundle().id()));
 		}
-		return create(crafts, index, pageOf(crafts.get(index), target, expanded), parent, focus, expanded);
+		return create(crafts, index, pageOf(crafts.get(index), target, expanded), parent, focus, expanded, 0);
+	}
+
+	// Filter button and its rarities
+	private static NeuCrafts.Fixed filterFixed(NeuCrafts.Layout layout) {
+		if (layout == null) {
+			return null;
+		}
+		for (NeuCrafts.Fixed fixed : layout.fixed()) {
+			if (FILTER_MODEL.equals(NeuCrafts.decode(fixed.item()).get(DataComponents.ITEM_MODEL))) {
+				return fixed;
+			}
+		}
+		return null;
+	}
+
+	private static List<String> filterOptions(ItemStack stack) {
+		ItemLore lore = stack.get(DataComponents.LORE);
+		List<String> options = new ArrayList<>();
+		if (lore == null) {
+			return options;
+		}
+		for (Component line : lore.lines()) {
+			String text = line.getString();
+			int mark = text.indexOf(FILTER_MARK);
+			if (mark < 0) {
+				continue;
+			}
+			String label = text.substring(mark + FILTER_MARK.length()).strip();
+			if (label.startsWith(">")) {
+				label = label.substring(1).strip();
+			}
+			options.add(label);
+		}
+		return options;
+	}
+
+	private static String rarity(NeuCrafts.Layout layout, int filter) {
+		NeuCrafts.Fixed fixed = filter <= 0 ? null : filterFixed(layout);
+		if (fixed == null) {
+			return null;
+		}
+		List<String> options = filterOptions(NeuCrafts.decode(fixed.item()));
+		return filter < options.size() ? options.get(filter).toLowerCase(Locale.ROOT).replace(' ', '_') : null;
+	}
+
+	private static boolean matches(NeuCrafts.Reward reward, String rarity) {
+		if (rarity == null || rarity.equals(NeuItems.rarity(reward.item()))) {
+			return true;
+		}
+		return reward.bundle() != null && reward.bundle().items().stream().anyMatch(member -> rarity.equals(NeuItems.rarity(member.item())));
+	}
+
+	// Chosen rarity marked in the lore
+	private static ItemStack filterStack(ItemStack stack, int filter) {
+		ItemStack copy = stack.copy();
+		ItemLore lore = copy.get(DataComponents.LORE);
+		if (lore == null) {
+			return copy;
+		}
+		List<Component> lines = new ArrayList<>();
+		int option = 0;
+		for (Component line : lore.lines()) {
+			String text = line.getString();
+			int mark = text.indexOf(FILTER_MARK);
+			if (mark < 0) {
+				lines.add(line);
+				continue;
+			}
+			String label = text.substring(mark + FILTER_MARK.length()).strip();
+			if (label.startsWith(">")) {
+				label = label.substring(1).strip();
+			}
+			boolean selected = option++ == filter;
+			lines.add(Component.empty().withStyle(style -> style.withColor(ChatFormatting.WHITE).withItalic(false))
+					.append(Component.literal(" " + FILTER_MARK + " ").withColor(FILTER_MARK_COLOR))
+					.append(Component.literal(selected ? "> " + label : label).withColor(selected ? FILTER_SELECTED_COLOR : FILTER_OPTION_COLOR)));
+		}
+		copy.set(DataComponents.LORE, new ItemLore(lines));
+		return copy;
 	}
 
 	// Item the screen was opened for
@@ -108,13 +205,16 @@ public final class CraftScreen extends ContainerScreen {
 		return null;
 	}
 
-	// Rewards shown, bundles opened or closed
-	private static List<NeuCrafts.Reward> shown(NeuCrafts.Craft craft, Set<String> expanded) {
+	// Rewards shown with the filter and opened bundles
+	private static List<NeuCrafts.Reward> shown(NeuCrafts.Craft craft, Set<String> expanded, String rarity) {
 		List<NeuCrafts.Reward> shown = new ArrayList<>();
 		for (NeuCrafts.Reward reward : craft.items()) {
+			if (!matches(reward, rarity)) {
+				continue;
+			}
 			shown.add(reward);
 			if (reward.bundle() != null && expanded.contains(reward.bundle().id())) {
-				shown.addAll(reward.bundle().items());
+				reward.bundle().items().stream().filter(member -> matches(member, rarity)).forEach(shown::add);
 			}
 		}
 		return shown;
@@ -123,10 +223,10 @@ public final class CraftScreen extends ContainerScreen {
 	// Page with the searched item
 	private static int pageOf(NeuCrafts.Craft craft, String focus, Set<String> expanded) {
 		NeuCrafts.Layout layout = NeuCrafts.layout(craft);
-		if (focus == null || pages(craft, layout, expanded) <= 1) {
+		if (focus == null || pages(craft, layout, expanded, null) <= 1) {
 			return 0;
 		}
-		List<NeuCrafts.Reward> shown = shown(craft, expanded);
+		List<NeuCrafts.Reward> shown = shown(craft, expanded, null);
 		for (int i = 0; i < shown.size(); i++) {
 			if (focus.equals(shown.get(i).item())) {
 				return i / layout.slots().size();
@@ -136,19 +236,22 @@ public final class CraftScreen extends ContainerScreen {
 	}
 
 	// Chest menu filled from the layout
-	private static CraftScreen create(List<NeuCrafts.Craft> crafts, int index, int page, Screen parent, List<String> focus, Set<String> expanded) {
+	private static CraftScreen create(List<NeuCrafts.Craft> crafts, int index, int page, Screen parent, List<String> focus, Set<String> expanded,
+			int filter) {
 		Minecraft client = Minecraft.getInstance();
 		NeuCrafts.Craft craft = crafts.get(index);
 		String target = target(craft, focus);
 		NeuCrafts.Layout layout = NeuCrafts.layout(craft);
+		String rarity = rarity(layout, filter);
 		int rows = Math.clamp((layout.size() + ROW_SIZE - 1) / ROW_SIZE, 1, MAX_ROWS);
 		SimpleContainer container = new SimpleContainer(rows * ROW_SIZE);
 		for (NeuCrafts.Fixed fixed : layout.fixed()) {
 			if (fixed.slot() >= 0 && fixed.slot() < container.getContainerSize()) {
-				container.setItem(fixed.slot(), NeuCrafts.decode(fixed.item()));
+				ItemStack stack = NeuCrafts.decode(fixed.item());
+				container.setItem(fixed.slot(), FILTER_MODEL.equals(stack.get(DataComponents.ITEM_MODEL)) ? filterStack(stack, filter) : stack);
 			}
 		}
-		List<NeuCrafts.Reward> shown = shown(craft, expanded);
+		List<NeuCrafts.Reward> shown = shown(craft, expanded, rarity);
 		Map<Integer, NeuCrafts.Reward> bundleSlots = new HashMap<>();
 		Set<Integer> focusSlots = new HashSet<>();
 		Map<Integer, ItemStack> badgeSlots = new HashMap<>();
@@ -174,7 +277,7 @@ public final class CraftScreen extends ContainerScreen {
 		if (page > 0) {
 			place(container, layout.previous());
 		}
-		if (page < pages(craft, layout, expanded) - 1) {
+		if (page < pages(craft, layout, expanded, rarity) - 1) {
 			place(container, layout.next());
 		}
 		Inventory empty = new Inventory(client.player, new EntityEquipment());
@@ -191,7 +294,7 @@ public final class CraftScreen extends ContainerScreen {
 			menu.slots.set(i, filled);
 		}
 		return new CraftScreen(menu, empty, NeuCrafts.title(layout), crafts, index, page, parent, focus, Set.copyOf(expanded), Map.copyOf(bundleSlots),
-				Set.copyOf(focusSlots), Map.copyOf(badgeSlots));
+				Set.copyOf(focusSlots), Map.copyOf(badgeSlots), filter);
 	}
 
 	private static void place(SimpleContainer container, NeuCrafts.Fixed fixed) {
@@ -200,11 +303,19 @@ public final class CraftScreen extends ContainerScreen {
 		}
 	}
 
-	private static int pages(NeuCrafts.Craft craft, NeuCrafts.Layout layout, Set<String> expanded) {
+	private static int pages(NeuCrafts.Craft craft, NeuCrafts.Layout layout, Set<String> expanded, String rarity) {
 		if (layout.slots().isEmpty() || layout.previous() == null || layout.next() == null) {
 			return 1;
 		}
-		return Math.max(1, (shown(craft, expanded).size() + layout.slots().size() - 1) / layout.slots().size());
+		return Math.max(1, (shown(craft, expanded, rarity).size() + layout.slots().size() - 1) / layout.slots().size());
+	}
+
+	private int pages(NeuCrafts.Layout layout, Set<String> expanded) {
+		return pages(this.crafts.get(this.index), layout, expanded, rarity(layout, this.filter));
+	}
+
+	private boolean isFilterSlot(Slot slot) {
+		return this.filterCount > 1 && slot.getContainerSlot() == this.filterSlot;
 	}
 
 	private NeuCrafts.Reward bundleAt(Slot slot) {
@@ -260,7 +371,7 @@ public final class CraftScreen extends ContainerScreen {
 		for (Tab tab : tabs()) {
 			NeuCrafts.Layout layout = NeuCrafts.layoutForType(tab.type());
 			NeuCrafts.Icon icon = layout == null ? null : layout.icon();
-			ItemStack item = icon != null && icon.item() != null ? NeuItems.stack(icon.item()) : null;
+			ItemStack item = NeuCrafts.iconStack(icon);
 			NeuItems.extractTab(graphics, tab.left(), tab.top(), tab.right() - tab.left(), item, icon == null ? null : icon.texture(),
 					tab.equals(hovered), tab.type().equals(type()));
 		}
@@ -294,14 +405,53 @@ public final class CraftScreen extends ContainerScreen {
 		return this.topPos + (this.imageHeight - PLAYER_INVENTORY_HEIGHT - RESULT_SIZE) / 2;
 	}
 
-	// NPC that gives the craft
-	private NeuNpcs.Npc npc() {
+	// NPCs/entity of the vendor
+	private List<NeuNpcs.Npc> npcs() {
 		NeuCrafts.Craft craft = this.crafts.get(this.index);
-		if (craft.result() != null) {
-			return null;
+		NeuCrafts.Layout layout = craft.result() != null ? null : NeuCrafts.layout(craft);
+		if (layout == null) {
+			return List.of();
 		}
-		NeuCrafts.Layout layout = NeuCrafts.layout(craft);
-		return layout == null ? null : NeuNpcs.get(layout.npc());
+		return layout.npcs().stream().map(NeuNpcs::get).filter(java.util.Objects::nonNull).toList();
+	}
+
+	private NeuNpcs.Npc npc() {
+		List<NeuNpcs.Npc> npcs = npcs();
+		return npcs.isEmpty() ? null : npcs.get(Math.clamp(this.npcIndex, 0, npcs.size() - 1));
+	}
+
+	private int npcSwitchTop() {
+		return npcTop() + NPC_HEIGHT + NeuItems.GAP;
+	}
+
+	private boolean onNpcSwitch(double x, double y) {
+		return y >= npcSwitchTop() && y < npcSwitchTop() + NeuItems.BOX_HEIGHT && npcs().size() > 1;
+	}
+
+	private boolean onNpcPrevious(double x, double y) {
+		return onNpcSwitch(x, y) && x >= npcLeft() && x < npcLeft() + NPC_ARROW_WIDTH;
+	}
+
+	private boolean onNpcNext(double x, double y) {
+		return onNpcSwitch(x, y) && x >= npcLeft() + NPC_WIDTH - NPC_ARROW_WIDTH && x < npcLeft() + NPC_WIDTH;
+	}
+
+	// Arrows between the NPCs
+	private void extractNpcSwitch(GuiGraphicsExtractor graphics, int count, int mouseX, int mouseY) {
+		int top = npcSwitchTop();
+		int bottom = top + NeuItems.BOX_HEIGHT;
+		int left = npcLeft();
+		int right = left + NPC_WIDTH;
+		int current = Math.clamp(this.npcIndex, 0, count - 1);
+		boolean previous = onNpcPrevious(mouseX, mouseY);
+		boolean next = onNpcNext(mouseX, mouseY);
+		NeuItems.extractBox(graphics, this.font, left, top, left + NPC_ARROW_WIDTH, bottom, Component.literal("<"), previous, current > 0);
+		NeuItems.extractBox(graphics, this.font, left + NPC_ARROW_WIDTH + NeuItems.GAP, top, right - NPC_ARROW_WIDTH - NeuItems.GAP, bottom,
+				Component.literal((current + 1) + "/" + count), false, true);
+		NeuItems.extractBox(graphics, this.font, right - NPC_ARROW_WIDTH, top, right, bottom, Component.literal(">"), next, current < count - 1);
+		if (previous && current > 0 || next && current < count - 1) {
+			NeuItems.pointer(graphics);
+		}
 	}
 
 	private int npcLeft() {
@@ -316,6 +466,7 @@ public final class CraftScreen extends ContainerScreen {
 		return x >= npcLeft() && x < npcLeft() + NPC_WIDTH && y >= npcTop() && y < npcTop() + NPC_HEIGHT;
 	}
 
+	// NPC preview and its tooltip
 	private void extractNpc(GuiGraphicsExtractor graphics, NeuNpcs.Npc npc, int mouseX, int mouseY) {
 		int left = npcLeft();
 		int top = npcTop();
@@ -349,14 +500,19 @@ public final class CraftScreen extends ContainerScreen {
 		return layout != null && layout.icon() != null && layout.icon().texture() != null ? layout.icon().texture() : NPC_WAYPOINT_ICON;
 	}
 
-	// Path to the NPC, same region only
 	private void pathTo(NeuNpcs.Npc npc) {
 		if (this.minecraft.player == null || !SpotPath.canPathTo(npc.position())) {
 			return;
 		}
 		int distance = (int) Math.round(this.minecraft.player.position().distanceTo(npc.position()));
 		NeuItems.clickSound();
-		SpotPath.focus(npc.position(), NPC_PATH_COLOR, waypointIcon());
+		NeuCrafts.Layout layout = NeuCrafts.layoutForType(type());
+		ItemStack modelIcon = layout != null && layout.icon() != null && layout.icon().model() != null ? NeuCrafts.iconStack(layout.icon()) : null;
+		if (modelIcon != null) {
+			SpotPath.focus(npc.position(), NPC_PATH_COLOR, modelIcon);
+		} else {
+			SpotPath.focus(npc.position(), NPC_PATH_COLOR, waypointIcon());
+		}
 		this.minecraft.player.sendOverlayMessage(Component.translatable("message.mccinfo.npc.path", npc.name(), distance)
 				.withStyle(net.minecraft.ChatFormatting.GOLD));
 		this.minecraft.gui.setScreen(null);
@@ -426,6 +582,10 @@ public final class CraftScreen extends ContainerScreen {
 		NeuNpcs.Npc npc = npc();
 		if (npc != null) {
 			extractNpc(graphics, npc, mouseX, mouseY);
+			int count = npcs().size();
+			if (count > 1) {
+				extractNpcSwitch(graphics, count, mouseX, mouseY);
+			}
 		}
 		extractTabs(graphics, mouseX, mouseY);
 		if (clickable(mouseX, mouseY, result)) {
@@ -433,7 +593,7 @@ public final class CraftScreen extends ContainerScreen {
 		}
 	}
 
-	// Result clickable for its own recipes
+	// Pointer on clickable things
 	private boolean clickable(int mouseX, int mouseY, ItemStack result) {
 		if ((onPrevious(mouseX, mouseY) && this.index > 0) || (onNext(mouseX, mouseY) && this.index < this.crafts.size() - 1)) {
 			return true;
@@ -447,7 +607,7 @@ public final class CraftScreen extends ContainerScreen {
 		}
 		NeuCrafts.Layout layout = NeuCrafts.layout(this.crafts.get(this.index));
 		if ((this.page > 0 && isPageSlot(slot, layout.previous()))
-				|| (this.page < pages(this.crafts.get(this.index), layout, this.expanded) - 1 && isPageSlot(slot, layout.next())) || bundleAt(slot) != null) {
+				|| (this.page < pages(layout, this.expanded) - 1 && isPageSlot(slot, layout.next())) || bundleAt(slot) != null || isFilterSlot(slot)) {
 			return true;
 		}
 		String name = slot.getItem().getHoverName().getString();
@@ -484,6 +644,16 @@ public final class CraftScreen extends ContainerScreen {
 			}
 			return true;
 		}
+		if (onNpcSwitch(event.x(), event.y())) {
+			int count = npcs().size();
+			int current = Math.clamp(this.npcIndex, 0, count - 1);
+			int wanted = onNpcPrevious(event.x(), event.y()) ? current - 1 : onNpcNext(event.x(), event.y()) ? current + 1 : current;
+			if (wanted != current && wanted >= 0 && wanted < count) {
+				NeuItems.clickSound();
+				this.npcIndex = wanted;
+			}
+			return true;
+		}
 		NeuNpcs.Npc npc = npc();
 		if (npc != null && onNpc(event.x(), event.y())) {
 			if (event.button() == GLFW.GLFW_MOUSE_BUTTON_LEFT) {
@@ -506,21 +676,27 @@ public final class CraftScreen extends ContainerScreen {
 		this.minecraft.gui.setScreen(create(this.crafts, index, this.parent, this.focus));
 	}
 
-	// Clicks: pages, back, exit, bundles and items
+	// Clicks: filter, pages, bundles, back, exit and items
 	@Override
 	protected void slotClicked(Slot slot, int slotId, int buttonNum, ContainerInput containerInput) {
 		if (slot == null || slot.container instanceof Inventory || !slot.hasItem()) {
 			return;
 		}
 		NeuCrafts.Layout layout = NeuCrafts.layout(this.crafts.get(this.index));
-		if (this.page > 0 && isPageSlot(slot, layout.previous())) {
+		if (isFilterSlot(slot)) {
+			int next = buttonNum == 1 ? (this.filter + this.filterCount - 1) % this.filterCount : (this.filter + 1) % this.filterCount;
 			NeuItems.clickSound();
-			this.minecraft.gui.setScreen(create(this.crafts, this.index, this.page - 1, this.parent, this.focus, this.expanded));
+			this.minecraft.gui.setScreen(create(this.crafts, this.index, 0, this.parent, this.focus, this.expanded, next));
 			return;
 		}
-		if (this.page < pages(this.crafts.get(this.index), layout, this.expanded) - 1 && isPageSlot(slot, layout.next())) {
+		if (this.page > 0 && isPageSlot(slot, layout.previous())) {
 			NeuItems.clickSound();
-			this.minecraft.gui.setScreen(create(this.crafts, this.index, this.page + 1, this.parent, this.focus, this.expanded));
+			this.minecraft.gui.setScreen(create(this.crafts, this.index, this.page - 1, this.parent, this.focus, this.expanded, this.filter));
+			return;
+		}
+		if (this.page < pages(layout, this.expanded) - 1 && isPageSlot(slot, layout.next())) {
+			NeuItems.clickSound();
+			this.minecraft.gui.setScreen(create(this.crafts, this.index, this.page + 1, this.parent, this.focus, this.expanded, this.filter));
 			return;
 		}
 		NeuCrafts.Reward bundle = bundleAt(slot);
@@ -530,8 +706,8 @@ public final class CraftScreen extends ContainerScreen {
 				expanded.add(bundle.bundle().id());
 			}
 			NeuItems.clickSound();
-			int page = Math.min(this.page, pages(this.crafts.get(this.index), layout, expanded) - 1);
-			this.minecraft.gui.setScreen(create(this.crafts, this.index, page, this.parent, this.focus, expanded));
+			int page = Math.min(this.page, pages(layout, expanded) - 1);
+			this.minecraft.gui.setScreen(create(this.crafts, this.index, page, this.parent, this.focus, expanded, this.filter));
 			return;
 		}
 		ItemStack stack = slot.getItem();

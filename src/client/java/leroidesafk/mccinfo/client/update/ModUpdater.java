@@ -8,8 +8,6 @@ import leroidesafk.mccinfo.Mccinfo;
 import net.fabricmc.fabric.api.client.command.v2.ClientCommandRegistrationCallback;
 import net.fabricmc.fabric.api.client.command.v2.FabricClientCommandSource;
 import net.fabricmc.loader.api.FabricLoader;
-import net.fabricmc.loader.api.Version;
-import net.fabricmc.loader.api.VersionParsingException;
 import net.fabricmc.loader.api.metadata.ModOrigin;
 import net.minecraft.client.Minecraft;
 import net.minecraft.network.chat.Component;
@@ -170,17 +168,58 @@ public final class ModUpdater {
 		}
 	}
 
-	// Never install an older version
+	// Never install an older version, -c : For Mod & Admin
+	private static final String CUSTOM_SUFFIX = "-c";
+
 	private static boolean isOlder(String target) {
-		Version current = FabricLoader.getInstance().getModContainer(Mccinfo.MOD_ID).map(container -> container.getMetadata().getVersion()).orElse(null);
-		if (current == null) {
+		if ("?".equals(Permissions.MOD_VERSION)) {
 			return true;
 		}
-		try {
-			return Version.parse(target).compareTo(current) < 0;
-		} catch (VersionParsingException e) {
-			return true;
+		return compareVersions(target, Permissions.MOD_VERSION) < 0;
+	}
+
+	// Version order, -c ignored
+	public static int compareVersions(String a, String b) {
+		String[] partsA = baseVersion(a).split("\\.");
+		String[] partsB = baseVersion(b).split("\\.");
+		for (int i = 0; i < Math.max(partsA.length, partsB.length); i++) {
+			String x = i < partsA.length ? partsA[i] : "0";
+			String y = i < partsB.length ? partsB[i] : "0";
+			int difference = Long.compare(partNumber(x), partNumber(y));
+			if (difference == 0) {
+				String lettersX = partLetters(x);
+				String lettersY = partLetters(y);
+				difference = lettersX.length() != lettersY.length() ? Integer.compare(lettersX.length(), lettersY.length()) : lettersX.compareTo(lettersY);
+			}
+			if (difference != 0) {
+				return difference;
+			}
 		}
+		return 0;
+	}
+
+	private static String baseVersion(String version) {
+		return version.endsWith(CUSTOM_SUFFIX) ? version.substring(0, version.length() - CUSTOM_SUFFIX.length()) : version;
+	}
+
+	private static long partNumber(String part) {
+		int end = 0;
+		while (end < part.length() && end < 18 && Character.isDigit(part.charAt(end))) {
+			end++;
+		}
+		return end == 0 ? 0L : Long.parseLong(part.substring(0, end));
+	}
+
+	private static String partLetters(String part) {
+		int start = 0;
+		while (start < part.length() && Character.isDigit(part.charAt(start))) {
+			start++;
+		}
+		int end = start;
+		while (end < part.length() && Character.isLetter(part.charAt(end))) {
+			end++;
+		}
+		return part.substring(start, end).toLowerCase(java.util.Locale.ROOT);
 	}
 
 	// Ed25519 signature of the version and SHA-256

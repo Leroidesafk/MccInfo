@@ -38,7 +38,7 @@ public final class EmotePreviewRenderer extends PictureInPictureRenderer<EmotePr
 		this.dispatcher = dispatcher;
 	}
 
-	// Emote preview in a cell, animated since the screen opened
+	// Emote preview in a cell
 	public static void extract(GuiGraphicsExtractor graphics, String id, long since, int x0, int y0, int x1, int y1) {
 		Minecraft client = Minecraft.getInstance();
 		if (client.player == null) {
@@ -60,7 +60,7 @@ public final class EmotePreviewRenderer extends PictureInPictureRenderer<EmotePr
 		Map<EmoteModel.Bone, Matrix4f> matrices = Map.of();
 		if (emote != null) {
 			double time = (System.nanoTime() - since) / 1.0E9;
-			matrices = EmoteRender.pose(emote, EmoteRender.phase(emote, time), new Molang.Scope());
+			matrices = EmoteRender.pose(emote, EmoteRender.phase(emote, time), emote.fill(new Molang.Scope()));
 			Emotes.previewPose(player, emote, matrices);
 		}
 		float scale = (x1 - x0) / SCENE_WIDTH;

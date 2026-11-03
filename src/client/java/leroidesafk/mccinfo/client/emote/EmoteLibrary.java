@@ -19,7 +19,6 @@ import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.Duration;
@@ -39,7 +38,7 @@ public final class EmoteLibrary {
 	record RemoteFile(String name, long size, String sha256) {
 	}
 
-	// Loaded emote: model, animations, effects and settings
+	// Loaded emote
 	static final class Emote {
 		final String id;
 		final EmoteModel model;
@@ -48,15 +47,23 @@ public final class EmoteLibrary {
 		final Identifier texture;
 		final Map<String, EmoteParticle> particles;
 		final Set<String> sounds;
+		final Map<String, byte[]> soundData;
 		final List<Identifier> textures;
 		final String music;
 		final Set<EmoteModel.Bone> glowing;
 		final Set<EmoteModel.Bone> billboard;
+		final List<EmoteModel.Bone> trails;
+		final Map<String, Double> variables;
 
 		Emote(String id, EmoteModel model, EmoteAnimation intro, EmoteAnimation loop, Identifier texture, Map<String, EmoteParticle> particles,
-				Set<String> sounds, List<Identifier> textures, boolean glowAll, Set<String> glowBones, Set<String> billboardBones) {
+				Map<String, byte[]> soundData, List<Identifier> textures, boolean glowAll, Set<String> glowBones, Set<String> billboardBones,
+				List<String> trailBones, Map<String, Double> variables) {
+			this.variables = variables;
+			Set<String> sounds = soundData.keySet();
+			this.soundData = soundData;
 			this.glowing = matching(model, glowAll, glowBones);
 			this.billboard = matching(model, false, billboardBones);
+			this.trails = trailBones.stream().map(model.byName::get).filter(java.util.Objects::nonNull).toList();
 			this.music = sounds.stream().filter(sound -> sound.equals("music") || sound.endsWith(".music")).sorted().findFirst().orElse(null);
 			this.id = id;
 			this.model = model;
@@ -67,11 +74,17 @@ public final class EmoteLibrary {
 			this.sounds = sounds;
 			this.textures = textures;
 		}
+
+		Molang.Scope fill(Molang.Scope scope) {
+			this.variables.forEach(scope.variables::putIfAbsent);
+			return scope;
+		}
 	}
 
-	// Files read before textures are made
+	// Files read, before the textures
 	private record Parsed(EmoteModel model, EmoteAnimation intro, EmoteAnimation loop, String modelTexture, Map<String, JsonObject> particles,
-			Set<String> sounds, Map<String, byte[]> images, boolean glowAll, Set<String> glowBones, Set<String> billboardBones) {
+			Map<String, byte[]> sounds, Map<String, byte[]> images, boolean glowAll, Set<String> glowBones, Set<String> billboardBones,
+			List<String> trailBones, Map<String, Double> variables) {
 	}
 
 	// Bones named in emote.json, with their children
@@ -102,9 +115,10 @@ public final class EmoteLibrary {
 	private static final Pattern SHA256 = Pattern.compile("[0-9a-f]{64}");
 	private static final long MAX_FILE_BYTES = 8L * 1024 * 1024;
 	private static final Duration TIMEOUT = Duration.ofSeconds(30);
-	// File lists and loaded emotes
 	private static final Map<String, String> SIGNATURES = new ConcurrentHashMap<>();
 	private static final Map<String, Emote> LOADED = new ConcurrentHashMap<>();
+	private static volatile String key;
+	private static volatile boolean cleaned;
 	private static HttpClient http;
 
 	private EmoteLibrary() {
@@ -114,13 +128,30 @@ public final class EmoteLibrary {
 		return id == null ? null : LOADED.get(id);
 	}
 
-	// Cache folder
-	static Path folder(String id) {
-		return Minecraft.getInstance().gameDirectory.toPath().resolve(Mccinfo.MOD_ID).resolve("emotes").resolve(id);
+	// Old disk cache
+	private static void removeOldCache() {
+		Path folder = Minecraft.getInstance().gameDirectory.toPath().resolve(Mccinfo.MOD_ID).resolve("emotes");
+		if (!Files.isDirectory(folder)) {
+			return;
+		}
+		try (var stream = Files.walk(folder)) {
+			for (Path path : stream.sorted(java.util.Comparator.reverseOrder()).toList()) {
+				Files.deleteIfExists(path);
+			}
+		} catch (IOException | RuntimeException e) {
+			Mccinfo.LOGGER.warn("Could not remove the old emote cache", e);
+		}
 	}
 
 	// Emote list from the relay
 	static void receive(JsonObject object) {
+		if (!cleaned) {
+			cleaned = true;
+			Util.nonCriticalIoPool().execute(EmoteLibrary::removeOldCache);
+		}
+		if (object.has("key") && object.get("key").isJsonPrimitive()) {
+			key = object.get("key").getAsString();
+		}
 		if (!object.has("emotes") || !object.get("emotes").isJsonArray()) {
 			return;
 		}
@@ -164,31 +195,14 @@ public final class EmoteLibrary {
 		}
 	}
 
-	// Missing files downloaded, then loaded
+	// Download, then load
 	private static void fetch(String id, List<RemoteFile> files, String signature) {
 		try {
-			Path folder = folder(id);
-			Files.createDirectories(folder);
+			Map<String, byte[]> data = new HashMap<>();
 			for (RemoteFile file : files) {
-				Path target = folder.resolve(file.name());
-				if (Files.isRegularFile(target) && Files.size(target) == file.size() && file.sha256().equals(sha256(Files.readAllBytes(target)))) {
-					continue;
-				}
-				byte[] data = download(id, file);
-				Path temporary = folder.resolve(file.name() + ".part");
-				Files.write(temporary, data);
-				Files.move(temporary, target, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+				data.put(file.name(), download(id, file));
 			}
-			Set<String> wanted = new HashSet<>();
-			files.forEach(file -> wanted.add(file.name()));
-			try (var stream = Files.list(folder)) {
-				for (Path old : stream.toList()) {
-					if (!wanted.contains(old.getFileName().toString())) {
-						Files.deleteIfExists(old);
-					}
-				}
-			}
-			Parsed parsed = parse(id, folder, files);
+			Parsed parsed = parse(id, data, files);
 			Minecraft.getInstance().execute(() -> {
 				if (signature.equals(SIGNATURES.get(id))) {
 					install(id, parsed);
@@ -200,11 +214,19 @@ public final class EmoteLibrary {
 		}
 	}
 
-	// One file, size and sha256 checked
+	// One checked file
 	private static byte[] download(String id, RemoteFile file) throws IOException {
-		URI uri = SpotSync.httpUri("/emotes/" + id + "/" + file.name());
-		if (uri == null) {
-			throw new IOException("No relay address");
+		URI base = SpotSync.httpUri("/emotes/" + id + "/" + file.name());
+		String currentKey = key;
+		if (base == null || currentKey == null) {
+			throw new IOException("No relay address or download key");
+		}
+		URI uri;
+		try {
+			String query = (base.getRawQuery() == null ? "" : base.getRawQuery() + "&") + "key=" + currentKey;
+			uri = new URI(base.getScheme() + "://" + base.getRawAuthority() + base.getRawPath() + "?" + query);
+		} catch (java.net.URISyntaxException e) {
+			throw new IOException(e);
 		}
 		synchronized (EmoteLibrary.class) {
 			if (http == null) {
@@ -233,32 +255,37 @@ public final class EmoteLibrary {
 		}
 	}
 
-	// Model, animations, particles, sounds and emote.json
-	private static Parsed parse(String id, Path folder, List<RemoteFile> files) throws IOException {
+	// Model, animations, particles and sounds
+	private static Parsed parse(String id, Map<String, byte[]> data, List<RemoteFile> files) {
 		EmoteModel model = EmoteModel.EMPTY;
 		EmoteAnimation intro = null;
 		EmoteAnimation loop = null;
 		EmoteAnimation single = null;
 		Map<String, JsonObject> particles = new HashMap<>();
-		Set<String> sounds = new HashSet<>();
+		Map<String, byte[]> sounds = new HashMap<>();
 		Map<String, byte[]> images = new HashMap<>();
 		boolean glowAll = false;
 		Set<String> glowBones = new HashSet<>();
 		Set<String> billboardBones = new HashSet<>();
+		List<String> trailBones = new ArrayList<>();
+		Map<String, Double> variables = new HashMap<>();
 		for (RemoteFile file : files) {
 			String name = file.name();
-			Path path = folder.resolve(name);
+			byte[] bytes = data.get(name);
+			if (bytes == null) {
+				continue;
+			}
 			if (name.endsWith(".png")) {
-				images.put(base(name), Files.readAllBytes(path));
+				images.put(base(name), bytes);
 				continue;
 			}
 			if (name.endsWith(".ogg")) {
-				sounds.add(base(name));
+				sounds.put(base(name), bytes);
 				continue;
 			}
 			JsonObject root;
 			try {
-				root = JsonParser.parseString(Files.readString(path, StandardCharsets.UTF_8)).getAsJsonObject();
+				root = JsonParser.parseString(new String(bytes, StandardCharsets.UTF_8)).getAsJsonObject();
 			} catch (RuntimeException e) {
 				Mccinfo.LOGGER.warn("Unreadable emote file {}/{}", id, name, e);
 				continue;
@@ -271,6 +298,14 @@ public final class EmoteLibrary {
 					glowBones.addAll(names(glow));
 				}
 				billboardBones.addAll(names(root.get("billboard")));
+				trailBones.addAll(names(root.get("trails")).stream().sorted().toList());
+				if (root.has("variables") && root.get("variables").isJsonObject()) {
+					for (Map.Entry<String, JsonElement> variable : root.getAsJsonObject("variables").entrySet()) {
+						if (variable.getValue().isJsonPrimitive() && variable.getValue().getAsJsonPrimitive().isNumber()) {
+							variables.put(variable.getKey().trim().toLowerCase(Locale.ROOT), variable.getValue().getAsDouble());
+						}
+					}
+				}
 			} else if (root.has("minecraft:geometry")) {
 				model = EmoteModel.parse(root);
 			} else if (root.has("animations")) {
@@ -300,7 +335,8 @@ public final class EmoteLibrary {
 				break;
 			}
 		}
-		return new Parsed(model, intro, loop, modelTexture, particles, sounds, images, glowAll, Set.copyOf(glowBones), Set.copyOf(billboardBones));
+		return new Parsed(model, intro, loop, modelTexture, particles, sounds, images, glowAll, Set.copyOf(glowBones), Set.copyOf(billboardBones),
+				List.copyOf(trailBones), Map.copyOf(variables));
 	}
 
 	private static String base(String name) {
@@ -308,7 +344,7 @@ public final class EmoteLibrary {
 		return withoutExtension.endsWith(".geo") ? withoutExtension.substring(0, withoutExtension.length() - 4) : withoutExtension;
 	}
 
-	// Textures and particles on the game thread
+	// Textures and particles
 	private static void install(String id, Parsed parsed) {
 		unload(id);
 		Map<String, Identifier> textures = new HashMap<>();
@@ -334,8 +370,9 @@ public final class EmoteLibrary {
 			}
 		}
 		Identifier modelTexture = parsed.modelTexture() == null ? null : textures.get(parsed.modelTexture());
-		LOADED.put(id, new Emote(id, parsed.model(), parsed.intro(), parsed.loop(), modelTexture, Map.copyOf(particles), Set.copyOf(parsed.sounds()),
-				List.copyOf(textures.values()), parsed.glowAll(), parsed.glowBones(), parsed.billboardBones()));
+		LOADED.put(id, new Emote(id, parsed.model(), parsed.intro(), parsed.loop(), modelTexture, Map.copyOf(particles), Map.copyOf(parsed.sounds()),
+				List.copyOf(textures.values()), parsed.glowAll(), parsed.glowBones(), parsed.billboardBones(),
+				parsed.trailBones(), parsed.variables()));
 	}
 
 	private static void unload(String id) {
@@ -345,12 +382,9 @@ public final class EmoteLibrary {
 		}
 	}
 
-	// Sound file for the sound mixin
-	static Path soundFile(String id, String sound) {
+	// Sound for the stream
+	static byte[] soundData(String id, String sound) {
 		Emote emote = LOADED.get(id);
-		if (emote == null || !ID.matcher(id).matches() || !emote.sounds.contains(sound)) {
-			return null;
-		}
-		return folder(id).resolve(sound + ".ogg");
+		return emote == null ? null : emote.soundData.get(sound);
 	}
 }

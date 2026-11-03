@@ -26,6 +26,7 @@ import net.minecraft.world.entity.Entity;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.WeakHashMap;
 import java.util.List;
 import java.util.Map;
@@ -39,18 +40,42 @@ public final class Emotes {
 	private static final float MODEL_TURN = 180.0F;
 	private static final float PLAYER_SCALE = 0.9375F;
 
+	// Sound ranges and pose blend
+	private static final double SOUND_HEIGHT = 1.0;
+	private static final double FULL_VOLUME_RANGE = 4.0;
+	private static final double HEARING_RANGE = 24.0;
+	private static final double LINK_RANGE = 24.0;
+	private static final double UNLINK_RANGE = 28.0;
+	private static final float FADE_STEP = 1.0F / 30.0F;
+	private static final int MUSIC_RETRY_TICKS = 20;
+	private static final double START_DELAY = 0.3;
+	private static final long BLEND_NANOS = 300_000_000L;
+
 	// Emote played by a player
 	private static final class Playing {
 		final UUID uuid;
 		final String emote;
 		final long startNanos;
+		final long createdNanos = System.nanoTime();
+		PoseSource pose;
 		final boolean local;
 		final Molang.Scope scope = new Molang.Scope();
 		final List<EmoteParticle.Emitter> emitters = new ArrayList<>();
 		final Map<EmoteParticle.Emitter, String> locators = new ConcurrentHashMap<>();
+		final Map<EmoteModel.Bone, EmoteTrail> trails = new java.util.IdentityHashMap<>();
 		double lastTime;
 		boolean armed;
-		boolean musicStarted;
+		EmoteSound music;
+		int musicRetry;
+		boolean present;
+		Vec3 at = Vec3.ZERO;
+		float near;
+		float loudness;
+		float gain;
+		boolean fresh = true;
+		boolean linked;
+		boolean centered;
+		Playing follows;
 		volatile boolean stopped;
 
 		Playing(UUID uuid, String emote, double elapsed, boolean local) {
@@ -58,16 +83,44 @@ public final class Emotes {
 			this.emote = emote;
 			this.startNanos = System.nanoTime() - (long) (elapsed * 1.0E9);
 			this.local = local;
-			this.lastTime = elapsed - 1.0E-4;
+			this.lastTime = Math.max(0.0, elapsed - START_DELAY) - 1.0E-4;
 		}
 
 		double time() {
-			return (System.nanoTime() - this.startNanos) / 1.0E9;
+			return Math.max(0.0, (System.nanoTime() - this.startNanos) / 1.0E9 - START_DELAY);
+		}
+
+		boolean waiting() {
+			return (System.nanoTime() - this.startNanos) / 1.0E9 < START_DELAY;
+		}
+
+		float blendIn() {
+			return ease(System.nanoTime() - this.createdNanos);
 		}
 	}
 
+	// Pose fading out
+	private record Fade(PoseSource pose, float strength, long nanos) {
+		float weight() {
+			return this.strength * (1.0F - ease(System.nanoTime() - this.nanos));
+		}
+
+		boolean done() {
+			return System.nanoTime() - this.nanos >= BLEND_NANOS;
+		}
+	}
+
+	private static float ease(long nanos) {
+		float progress = Mth.clamp(nanos / (float) BLEND_NANOS, 0.0F, 1.0F);
+		return progress * progress * (3.0F - 2.0F * progress);
+	}
+
+	private static final Map<UUID, Fade> FADING = new ConcurrentHashMap<>();
+
 	// Emotes by player and the current world
 	private static final Map<UUID, Playing> PLAYING = new ConcurrentHashMap<>();
+	private static final List<EmoteMirage> MIRAGES = new ArrayList<>();
+	private static final List<EmoteShockwave> WAVES = new ArrayList<>();
 	private static ClientLevel level;
 
 	private Emotes() {
@@ -79,6 +132,7 @@ public final class Emotes {
 		SpotSync.addHandler("emote_state", object -> Minecraft.getInstance().execute(() -> receiveState(object)));
 		ClientTickEvents.END_CLIENT_TICK.register(Emotes::tick);
 		LevelRenderEvents.COLLECT_SUBMITS.register(Emotes::collectSubmits);
+		LevelRenderEvents.AFTER_SOLID_FEATURES.register(context -> EmoteShockwave.copyScene());
 		net.fabricmc.fabric.api.client.rendering.v1.PictureInPictureRendererRegistry.register(
 				context -> new EmotePreviewRenderer(context.minecraft().getEntityRenderDispatcher()));
 	}
@@ -151,6 +205,7 @@ public final class Emotes {
 		}
 	}
 
+	// Start and stop
 	private static void start(UUID uuid, String emote, double elapsed, boolean local) {
 		stop(uuid);
 		PLAYING.put(uuid, new Playing(uuid, emote, elapsed, local));
@@ -160,6 +215,9 @@ public final class Emotes {
 		Playing old = PLAYING.remove(uuid);
 		if (old != null) {
 			old.stopped = true;
+			if (old.pose != null) {
+				FADING.put(uuid, new Fade(old.pose, old.blendIn(), System.nanoTime()));
+			}
 		}
 	}
 
@@ -169,10 +227,17 @@ public final class Emotes {
 			level = client.level;
 			PLAYING.values().forEach(playing -> playing.stopped = true);
 			PLAYING.clear();
+			MIRAGES.clear();
+			WAVES.clear();
+			FADING.clear();
 		}
+		MIRAGES.removeIf(EmoteMirage::done);
+		WAVES.removeIf(EmoteShockwave::done);
+		FADING.values().removeIf(Fade::done);
 		if (level == null) {
 			return;
 		}
+		mix(client);
 		for (Playing playing : List.copyOf(PLAYING.values())) {
 			EmoteLibrary.Emote emote = EmoteLibrary.get(playing.emote);
 			if (emote == null) {
@@ -205,22 +270,42 @@ public final class Emotes {
 				playing.emitters.clear();
 				continue;
 			}
+			if (playing.waiting()) {
+				continue;
+			}
 			boolean sounds = ModConfig.get().emoteSounds;
-			if (!sounds) {
-				playing.musicStarted = false;
-			} else if (!playing.musicStarted && emote.music != null) {
-				playing.musicStarted = true;
-				client.getSoundManager().play(new EmoteSound(emote.id, emote.music, () -> position(playing), () -> alive(playing), true));
+			if (playing.musicRetry > 0) {
+				playing.musicRetry--;
+			}
+			boolean moved = playing.music != null && !playing.music.isStopped() && playing.music.centered() != playing.centered;
+			if (moved) {
+				client.getSoundManager().stop(playing.music);
+				playing.musicRetry = 0;
+			}
+			if (sounds && emote.music != null && playing.musicRetry == 0
+					&& (moved || playing.music == null || playing.music.isStopped() || !client.getSoundManager().isActive(playing.music))) {
+				playing.musicRetry = MUSIC_RETRY_TICKS;
+				playing.music = new EmoteSound(emote.id, emote.music, time, () -> volume(playing), () -> alive(playing), sourceOf(playing), true);
+				client.getSoundManager().play(playing.music);
 			}
 			Matrix4f root = root(player.position(), player.getYHeadRot());
-			Map<EmoteModel.Bone, Matrix4f> matrices = EmoteRender.pose(emote, phase, playing.scope);
+			Map<EmoteModel.Bone, Matrix4f> matrices = EmoteRender.pose(emote, phase, emote.fill(playing.scope));
 			double from = playing.lastTime;
 			EmoteRender.effectsBetween(emote, from, time, true, effect -> {
-				if (sounds && emote.sounds.contains(effect.effect())) {
-					client.getSoundManager().play(new EmoteSound(emote.id, effect.effect(), () -> position(playing), () -> alive(playing), false));
+				if (sounds && emote.sounds.contains(effect.effect()) && !effect.effect().equals(emote.music)) {
+					client.getSoundManager().play(new EmoteSound(emote.id, effect.effect(), 0.0, () -> volume(playing), () -> alive(playing), sourceOf(playing), false));
 				}
 			});
 			EmoteRender.effectsBetween(emote, from, time, false, effect -> {
+				if (EmoteMirage.EFFECT.equals(effect.effect()) && !emote.particles.containsKey(EmoteMirage.EFFECT)) {
+					MIRAGES.add(EmoteMirage.capture(player, emote, matrices));
+					return;
+				}
+				if (EmoteShockwave.EFFECT.equals(effect.effect()) && !emote.particles.containsKey(EmoteShockwave.EFFECT)) {
+					Vector3f center = locator(emote, matrices, root, effect.locator());
+					WAVES.add(new EmoteShockwave(new Vec3(center.x, center.y, center.z)));
+					return;
+				}
 				EmoteParticle definition = emote.particles.get(effect.effect());
 				if (definition != null) {
 					EmoteParticle.Emitter emitter = definition.new Emitter();
@@ -243,16 +328,84 @@ public final class Emotes {
 		}
 	}
 
-	private static boolean alive(Playing playing) {
-		return !playing.stopped && ModConfig.get().emoteSounds;
+	// One music for the same emote nearby
+	private static void mix(Minecraft client) {
+		Vec3 listener = client.gameRenderer.mainCamera().position();
+		List<Playing> order = new ArrayList<>();
+		for (Playing playing : PLAYING.values()) {
+			Player player = EmoteLibrary.get(playing.emote) == null ? null : level.getPlayerByUUID(playing.uuid);
+			playing.present = player != null;
+			if (player != null) {
+				playing.at = player.position();
+				playing.near = hearing(playing.at.distanceTo(listener));
+				order.add(playing);
+			}
+		}
+		order.sort(Comparator.comparingLong((Playing playing) -> playing.startNanos).thenComparing(playing -> playing.uuid));
+		List<Playing> leaders = new ArrayList<>();
+		for (Playing playing : order) {
+			Playing leader = null;
+			for (Playing candidate : leaders) {
+				double range = playing.linked && candidate == playing.follows ? UNLINK_RANGE : LINK_RANGE;
+				if (candidate.emote.equals(playing.emote) && candidate.at.distanceTo(playing.at) < range) {
+					leader = candidate;
+					break;
+				}
+			}
+			playing.linked = leader != null;
+			if (leader != null) {
+				playing.follows = leader;
+			} else {
+				leaders.add(playing);
+			}
+			playing.loudness = playing.near;
+			float target = playing.linked ? 0.0F : 1.0F;
+			if (playing.fresh) {
+				playing.fresh = false;
+				playing.gain = target;
+			} else if (playing.gain < target) {
+				playing.gain = Math.min(target, playing.gain + FADE_STEP);
+			} else {
+				playing.gain = Math.max(target, playing.gain - FADE_STEP);
+			}
+		}
+		for (Playing playing : order) {
+			Playing leader = playing.follows;
+			if (leader == null) {
+				continue;
+			}
+			if (!playing.linked && playing.gain >= 1.0F || PLAYING.get(leader.uuid) != leader || !leader.present) {
+				playing.follows = null;
+				continue;
+			}
+			leader.loudness = Math.max(leader.loudness, playing.near * (1.0F - playing.gain));
+		}
+		Playing self = client.player == null ? null : PLAYING.get(client.player.getUUID());
+		Playing group = self == null || !self.present ? null : self.follows != null ? self.follows : self;
+		for (Playing playing : PLAYING.values()) {
+			playing.centered = group != null && (playing == group || playing.follows == group);
+		}
 	}
 
-	private static Vec3 position(Playing playing) {
-		if (playing.stopped || level == null) {
-			return null;
-		}
-		Player player = level.getPlayerByUUID(playing.uuid);
-		return player == null ? null : player.position();
+	// Volume and sound source
+	private static float hearing(double distance) {
+		return (float) Mth.clamp(1.0 - (distance - FULL_VOLUME_RANGE) / (HEARING_RANGE - FULL_VOLUME_RANGE), 0.0, 1.0);
+	}
+
+	private static double volume(Playing playing) {
+		return playing.gain * playing.loudness;
+	}
+
+	private static java.util.function.Supplier<Vec3> sourceOf(Playing playing) {
+		return playing.centered ? null : () -> source(playing);
+	}
+
+	private static Vec3 source(Playing playing) {
+		return playing.at.add(0.0, SOUND_HEIGHT, 0.0);
+	}
+
+	private static boolean alive(Playing playing) {
+		return !playing.stopped && playing.present && ModConfig.get().emoteSounds;
 	}
 
 	// Model space to world
@@ -277,20 +430,38 @@ public final class Emotes {
 
 	// Emote pose on a rendered player
 	public static void applyPose(PlayerModel model, AvatarRenderState state) {
-		PoseSource source = PREVIEW_POSES.get(state);
-		if (source == null) {
-			if (PLAYING.isEmpty() || level == null || !(level.getEntity(state.id) instanceof Player player)) {
-				return;
-			}
-			Playing playing = PLAYING.get(player.getUUID());
-			EmoteLibrary.Emote emote = playing == null ? null : EmoteLibrary.get(playing.emote);
-			EmoteRender.Phase phase = emote == null ? null : EmoteRender.phase(emote, playing.time());
-			if (phase == null) {
-				return;
-			}
-			source = new PoseSource(emote, EmoteRender.pose(emote, phase, playing.scope));
+		PoseSource preview = PREVIEW_POSES.get(state);
+		if (preview != null) {
+			EmotePlayerPose.apply(model, preview.emote().model, preview.matrices());
+			return;
 		}
-		EmotePlayerPose.apply(model, source.emote().model, source.matrices());
+		if (PLAYING.isEmpty() && FADING.isEmpty() || level == null || !(level.getEntity(state.id) instanceof Player player)) {
+			return;
+		}
+		Playing playing = PLAYING.get(player.getUUID());
+		EmoteLibrary.Emote emote = playing == null ? null : EmoteLibrary.get(playing.emote);
+		EmoteRender.Phase phase = emote == null ? null : EmoteRender.phase(emote, playing.time());
+		PoseSource source = null;
+		if (phase != null) {
+			source = new PoseSource(emote, EmoteRender.pose(emote, phase, emote.fill(playing.scope)));
+			playing.pose = source;
+		}
+		Fade fade = FADING.get(player.getUUID());
+		if (source == null && fade == null) {
+			return;
+		}
+		float[][] base = EmotePlayerPose.capture(model);
+		if (fade != null) {
+			EmotePlayerPose.apply(model, fade.pose().emote().model, fade.pose().matrices());
+			EmotePlayerPose.blend(model, base, fade.weight());
+			if (source != null) {
+				base = EmotePlayerPose.capture(model);
+			}
+		}
+		if (source != null) {
+			EmotePlayerPose.apply(model, source.emote().model, source.matrices());
+			EmotePlayerPose.blend(model, base, playing.blendIn());
+		}
 	}
 
 	// Cloaks riding an emoting player (It's currently the neatest and prettiest way I've found)
@@ -298,16 +469,26 @@ public final class Emotes {
 
 	public static void extractPassenger(Entity entity, Object state, double x, double y, double z, float partial) {
 		PASSENGER_MOTION.remove(state);
-		if (PLAYING.isEmpty() || !(entity.getRootVehicle() instanceof Player player) || player == entity) {
+		if (PLAYING.isEmpty() && FADING.isEmpty() || !(entity.getRootVehicle() instanceof Player player) || player == entity) {
 			return;
+		}
+		Matrix4f body = null;
+		Fade fade = FADING.get(player.getUUID());
+		if (fade != null) {
+			Matrix4f motion = EmotePlayerPose.bodyMotion(fade.pose().emote().model, fade.pose().matrices());
+			if (motion != null) {
+				body = EmotePlayerPose.mix(new Matrix4f(), motion, fade.weight());
+			}
 		}
 		Playing playing = PLAYING.get(player.getUUID());
 		EmoteLibrary.Emote emote = playing == null ? null : EmoteLibrary.get(playing.emote);
 		EmoteRender.Phase phase = emote == null ? null : EmoteRender.phase(emote, playing.time());
-		if (phase == null || !EmotePlayerPose.animatesPlayer(emote.model)) {
-			return;
+		if (phase != null) {
+			Matrix4f motion = EmotePlayerPose.bodyMotion(emote.model, EmoteRender.pose(emote, phase, emote.fill(playing.scope)));
+			if (motion != null) {
+				body = EmotePlayerPose.mix(body == null ? new Matrix4f() : body, motion, playing.blendIn());
+			}
 		}
-		Matrix4f body = EmotePlayerPose.bodyMotion(emote.model, EmoteRender.pose(emote, phase, playing.scope));
 		if (body == null) {
 			return;
 		}
@@ -326,9 +507,9 @@ public final class Emotes {
 		}
 	}
 
-	// Emote models and particles in the world
+	// Models, mirages, waves, trails and particles
 	private static void collectSubmits(LevelRenderContext context) {
-		if (PLAYING.isEmpty() || level == null) {
+		if (PLAYING.isEmpty() && MIRAGES.isEmpty() && WAVES.isEmpty() || level == null) {
 			return;
 		}
 		CameraRenderState camera = context.levelState().cameraRenderState;
@@ -339,24 +520,59 @@ public final class Emotes {
 		float partial = client.getDeltaTracker().getGameTimeDeltaPartialTick(false);
 		Vector3f cameraPosition = new Vector3f((float) camera.pos.x, (float) camera.pos.y, (float) camera.pos.z);
 		PoseStack poseStack = context.poseStack();
+		long now = System.nanoTime();
+		Entity viewer = client.options.getCameraType().isFirstPerson() ? client.getCameraEntity() : null;
+		UUID firstPerson = viewer == null ? null : viewer.getUUID();
+		for (EmoteMirage mirage : MIRAGES) {
+			if (!mirage.owner().equals(firstPerson)) {
+				mirage.submit(context.submitNodeCollector(), poseStack, camera);
+			}
+		}
+		if (!WAVES.isEmpty() && EmoteShockwave.prepare()) {
+			for (EmoteShockwave wave : WAVES) {
+				wave.submit(context.submitNodeCollector(), poseStack, camera);
+			}
+		}
 		for (Playing playing : PLAYING.values()) {
 			EmoteLibrary.Emote emote = EmoteLibrary.get(playing.emote);
 			Player player = emote == null ? null : level.getPlayerByUUID(playing.uuid);
 			if (player == null) {
 				continue;
 			}
+			boolean hidden = player.getUUID().equals(firstPerson);
 			EmoteRender.Phase phase = EmoteRender.phase(emote, playing.time());
 			if (phase != null) {
 				Vec3 position = player.getPosition(partial);
 				float yaw = player.getViewYRot(partial);
-				poseStack.pushPose();
-				poseStack.translate(position.x - camera.pos.x, position.y - camera.pos.y, position.z - camera.pos.z);
-				poseStack.mulPose(Axis.YP.rotationDegrees(MODEL_TURN - yaw));
-				poseStack.scale(MODEL_SCALE, MODEL_SCALE, MODEL_SCALE);
-				int light = LightCoordsUtil.getLightCoords(level, BlockPos.containing(player.getEyePosition(partial)));
-				EmoteRender.submitModel(context.submitNodeCollector(), poseStack, emote, EmoteRender.pose(emote, phase, playing.scope), light,
-						new Quaternionf().rotateY((float) Math.toRadians(yaw - MODEL_TURN)).mul(camera.orientation).rotateY((float) Math.PI));
-				poseStack.popPose();
+				Map<EmoteModel.Bone, Matrix4f> matrices = EmoteRender.pose(emote, phase, emote.fill(playing.scope));
+				if (!hidden) {
+					poseStack.pushPose();
+					poseStack.translate(position.x - camera.pos.x, position.y - camera.pos.y, position.z - camera.pos.z);
+					poseStack.mulPose(Axis.YP.rotationDegrees(MODEL_TURN - yaw));
+					poseStack.scale(MODEL_SCALE, MODEL_SCALE, MODEL_SCALE);
+					int light = LightCoordsUtil.getLightCoords(level, BlockPos.containing(player.getEyePosition(partial)));
+					EmoteRender.submitModel(context.submitNodeCollector(), poseStack, emote, matrices, light,
+							new Quaternionf().rotateY((float) Math.toRadians(yaw - MODEL_TURN)).mul(camera.orientation).rotateY((float) Math.PI));
+					poseStack.popPose();
+				}
+				if (!emote.trails.isEmpty()) {
+					float bodyRot = Mth.rotLerp(partial, player.yBodyRotO, player.yBodyRot);
+					Matrix4f body = new Matrix4f().translate((float) position.x, (float) position.y, (float) position.z)
+							.rotateY((float) Math.toRadians(MODEL_TURN - bodyRot)).scale(PLAYER_SCALE * MODEL_SCALE);
+					double radians = Math.toRadians(bodyRot);
+					Vec3 back = new Vec3(Math.sin(radians), 0.0, -Math.cos(radians));
+					for (EmoteModel.Bone bone : emote.trails) {
+						Matrix4f matrix = matrices.get(bone);
+						if (matrix != null) {
+							playing.trails.computeIfAbsent(bone, key -> new EmoteTrail()).add(bone, new Matrix4f(body).mul(matrix), back, now);
+						}
+					}
+				}
+			}
+			if (!hidden) {
+				for (EmoteTrail trail : playing.trails.values()) {
+					trail.submit(context.submitNodeCollector(), poseStack, camera.pos, now);
+				}
 			}
 			EmoteRender.submitParticles(context.submitNodeCollector(), poseStack, playing.emitters, cameraPosition, camera.orientation, partial);
 		}

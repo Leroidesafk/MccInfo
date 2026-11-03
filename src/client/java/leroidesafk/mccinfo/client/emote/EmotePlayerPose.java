@@ -3,7 +3,9 @@ package leroidesafk.mccinfo.client.emote;
 import net.minecraft.client.model.geom.ModelPart;
 import net.minecraft.client.model.geom.PartPose;
 import net.minecraft.client.model.player.PlayerModel;
+import net.minecraft.util.Mth;
 import org.joml.Matrix4f;
+import org.joml.Quaternionf;
 import org.joml.Vector3f;
 
 import java.util.LinkedHashMap;
@@ -127,5 +129,58 @@ final class EmotePlayerPose {
 		part.xScale = scale.x;
 		part.yScale = scale.y;
 		part.zScale = scale.z;
+	}
+
+	// Blend between two poses
+	private static ModelPart[] blendParts(PlayerModel model) {
+		return new ModelPart[] {model.root(), model.head, model.body, model.rightArm, model.leftArm, model.rightLeg, model.leftLeg};
+	}
+
+	static float[][] capture(PlayerModel model) {
+		ModelPart[] parts = blendParts(model);
+		float[][] values = new float[parts.length][];
+		for (int i = 0; i < parts.length; i++) {
+			ModelPart part = parts[i];
+			values[i] = new float[] {part.x, part.y, part.z, part.xRot, part.yRot, part.zRot, part.xScale, part.yScale, part.zScale};
+		}
+		return values;
+	}
+
+	static void blend(PlayerModel model, float[][] from, float weight) {
+		if (weight >= 1.0F) {
+			return;
+		}
+		ModelPart[] parts = blendParts(model);
+		for (int i = 0; i < parts.length; i++) {
+			ModelPart part = parts[i];
+			float[] start = from[i];
+			part.x = Mth.lerp(weight, start[0], part.x);
+			part.y = Mth.lerp(weight, start[1], part.y);
+			part.z = Mth.lerp(weight, start[2], part.z);
+			Quaternionf rotation = new Quaternionf().rotationZYX(start[5], start[4], start[3])
+					.slerp(new Quaternionf().rotationZYX(part.zRot, part.yRot, part.xRot), weight);
+			Vector3f angles = rotation.getEulerAnglesZYX(new Vector3f());
+			part.xRot = angles.x;
+			part.yRot = angles.y;
+			part.zRot = angles.z;
+			part.xScale = Mth.lerp(weight, start[6], part.xScale);
+			part.yScale = Mth.lerp(weight, start[7], part.yScale);
+			part.zScale = Mth.lerp(weight, start[8], part.zScale);
+		}
+	}
+
+	// Blend of two matrices
+	static Matrix4f mix(Matrix4f from, Matrix4f to, float weight) {
+		if (weight >= 1.0F) {
+			return new Matrix4f(to);
+		}
+		Vector3f fromScale = from.getScale(new Vector3f());
+		Vector3f toScale = to.getScale(new Vector3f());
+		if (Math.min(fromScale.minComponent(), toScale.minComponent()) < 1.0E-6F) {
+			return new Matrix4f(weight < 0.5F ? from : to);
+		}
+		Vector3f translation = from.getTranslation(new Vector3f()).lerp(to.getTranslation(new Vector3f()), weight);
+		Quaternionf rotation = from.getNormalizedRotation(new Quaternionf()).slerp(to.getNormalizedRotation(new Quaternionf()), weight);
+		return new Matrix4f().translationRotateScale(translation, rotation, fromScale.lerp(toScale, weight));
 	}
 }

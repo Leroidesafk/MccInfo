@@ -455,6 +455,7 @@ public final class VoiceChat {
 
 	// Player volumes
 	public static final UUID OTHERS = new UUID(0L, 0L);
+	private static final String OTHER_CATEGORY = "other";
 
 	public record VolumePlayer(UUID id, String name) {
 	}
@@ -658,6 +659,9 @@ public final class VoiceChat {
 		private static Method configSet;
 		private static Method configSave;
 		private static Object volumeConfig;
+		private static Object categoryVolumeConfig;
+		private static Object usernameCache;
+		private static Method updateUsername;
 		private static Method getVolume;
 		private static Method setVolume;
 		private static Method saveVolumes;
@@ -721,6 +725,9 @@ public final class VoiceChat {
 			canEnable = stateManager.getMethod("canEnable");
 			Class<?> voicechatClientClass = Class.forName("de.maxhenkel.voicechat.VoicechatClient");
 			volumeConfig = voicechatClientClass.getField("PLAYER_VOLUME_CONFIG").get(null);
+			categoryVolumeConfig = voicechatClientClass.getField("CATEGORY_VOLUME_CONFIG").get(null);
+			usernameCache = voicechatClientClass.getField("USERNAME_CACHE").get(null);
+			updateUsername = Class.forName("de.maxhenkel.voicechat.profile.UsernameCache").getMethod("updateUsername", UUID.class, String.class);
 			Class<?> volumeBase = Class.forName("de.maxhenkel.voicechat.config.VolumeConfigBase");
 			getVolume = volumeBase.getMethod("getVolume", Object.class);
 			setVolume = volumeBase.getMethod("setVolume", Object.class, double.class, String[].class);
@@ -735,10 +742,14 @@ public final class VoiceChat {
 			getClient = clientManager.getMethod("getClient");
 		}
 
+		// Relay player states
 		static Object playerState(UUID uuid, String name, boolean disabled, UUID group) throws ReflectiveOperationException {
 			load();
 			Object state = playerState.newInstance(uuid, name, disabled, false);
 			setGroup.invoke(state, group);
+			if (usernameCache != null) {
+				updateUsername.invoke(usernameCache, uuid, name);
+			}
 			return state;
 		}
 
@@ -837,6 +848,7 @@ public final class VoiceChat {
 			}
 		}
 
+		// Volumes, others in their category
 		static List<VolumePlayer> volumePlayers() throws ReflectiveOperationException {
 			load();
 			List<VolumePlayer> players = new ArrayList<>();
@@ -848,11 +860,20 @@ public final class VoiceChat {
 
 		static double volume(UUID player) throws ReflectiveOperationException {
 			load();
+			if (OTHERS.equals(player)) {
+				return categoryVolumeConfig == null ? 1.0 : (double) getVolume.invoke(categoryVolumeConfig, OTHER_CATEGORY);
+			}
 			return volumeConfig == null ? 1.0 : (double) getVolume.invoke(volumeConfig, player);
 		}
 
 		static void setVolume(UUID player, double value, String comment) throws ReflectiveOperationException {
 			load();
+			if (OTHERS.equals(player)) {
+				if (categoryVolumeConfig != null) {
+					setVolume.invoke(categoryVolumeConfig, OTHER_CATEGORY, value, new String[]{comment});
+				}
+				return;
+			}
 			if (volumeConfig != null) {
 				setVolume.invoke(volumeConfig, player, value, new String[]{comment});
 			}
@@ -862,6 +883,9 @@ public final class VoiceChat {
 			load();
 			if (volumeConfig != null) {
 				saveVolumes.invoke(volumeConfig);
+			}
+			if (categoryVolumeConfig != null) {
+				saveVolumes.invoke(categoryVolumeConfig);
 			}
 		}
 

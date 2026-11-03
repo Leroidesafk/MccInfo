@@ -83,6 +83,8 @@
   "screen.mccinfo.permissions.widgets_available": "Available (drag here to take back)",
   "screen.mccinfo.permissions.widgets_drop": "Drag widgets here",
   "screen.mccinfo.permissions.widgets_none": "No widgets",
+  "screen.mccinfo.permissions.widget_owners": "Widgets (%s)",
+  "screen.mccinfo.permissions.widget_nobody": "Nobody",
   "message.mccinfo.not_on_island": "Only available on MCC Island",
   "message.mccinfo.update_needed.hint": "Type /mccupdate to install it",
   "screen.mccinfo.update.title": "Mccinfo update",

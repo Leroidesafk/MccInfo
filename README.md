@@ -7,7 +7,6 @@ Client-side Qol mod for [MCC Island](https://mccisland.net), Minecraft 26.2.
 
 ## Requirements
 
----
 - Minecraft 26.2
 - [Fabric Loader](https://fabricmc.net/use/) 0.19.3 or newer
 - [Fabric API](https://modrinth.com/mod/fabric-api)
@@ -16,7 +15,6 @@ Client-side Qol mod for [MCC Island](https://mccisland.net), Minecraft 26.2.
 
 ## Features
 
----
 Open the MccInfo menu to turn each feature on or off.
 <img src="readme/settings.png" alt="Settings exemple" width="500">
 
@@ -80,7 +78,6 @@ Each MCC Island event gets its own page of settings and features in the MccInfo 
 
 ## Auto Update
 
----
 Automatic updates are reserved for people close to the developer. If you are one of them, you can ask for access. Everyone else gets a download link when a new version is out (see below).
 
 When the MccInfo relay asks for a newer version, a toast offers to install it. Nothing is installed until you click **Install**; the game then restarts on the new version. You can also open the toast again with `/mccupdate`.
@@ -98,7 +95,6 @@ Without automatic updates, the toast opens a download link instead (https only),
 
 ## Credits
 
----
 - [Essential](https://github.com/SparkUniverse/Essential-Mod) and [Trident](https://github.com/pe3ep/Trident), whose menu and interface style MccInfo follows to keep a consistent UI with the mods players already use.
 
 > [!NOTE]

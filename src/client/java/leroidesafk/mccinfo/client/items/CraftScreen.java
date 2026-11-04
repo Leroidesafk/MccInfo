@@ -46,6 +46,8 @@ public final class CraftScreen extends ContainerScreen {
 	private static final int NPC_WIDTH = RESULT_SIZE;
 	private static final int NPC_HEIGHT = RESULT_SIZE * 5 / 3;
 	private static final int NPC_ARROW_WIDTH = 14;
+	private static final int NPC_LABEL_PADDING = 2;
+	private static final int NPC_LABEL_CAPS = 7;
 	// Path to the NPC
 	private static final int NPC_PATH_COLOR = 0xFFAA00;
 	private static final Identifier NPC_WAYPOINT_ICON = Mccinfo.id("textures/gui/recipes/vendor.png");
@@ -421,7 +423,36 @@ public final class CraftScreen extends ContainerScreen {
 	}
 
 	private int npcSwitchTop() {
+		NeuNpcs.Npc npc = npc();
+		boolean area = npc != null && Regions.at(npc.position()) != null;
+		return npcAreaTop() + (area ? NeuItems.BOX_HEIGHT + NeuItems.GAP : 0);
+	}
+
+	// NPC name and area boxes
+	private int npcNameTop() {
+		return npcTop() - NeuItems.GAP - NeuItems.BOX_HEIGHT;
+	}
+
+	private int npcAreaTop() {
 		return npcTop() + NPC_HEIGHT + NeuItems.GAP;
+	}
+
+	// Text shrunk to fit the box
+	private void extractNpcLabel(GuiGraphicsExtractor graphics, int top, Component text) {
+		int left = npcLeft();
+		int width = this.font.width(text) - 1;
+		int inner = NPC_WIDTH - NPC_LABEL_PADDING * 2;
+		if (width <= inner) {
+			NeuItems.extractBox(graphics, this.font, left, top, left + NPC_WIDTH, top + NeuItems.BOX_HEIGHT, text, false, true);
+			return;
+		}
+		OverlayStyle.fillRounded(graphics, left, top, NPC_WIDTH, NeuItems.BOX_HEIGHT, NeuItems.BOX_COLOR);
+		float scale = (float) inner / width;
+		graphics.pose().pushMatrix();
+		graphics.pose().translate(left + NPC_LABEL_PADDING, top + (NeuItems.BOX_HEIGHT - NPC_LABEL_CAPS * scale) / 2.0F);
+		graphics.pose().scale(scale, scale);
+		graphics.text(this.font, text, 0, 0, 0xFFFFFFFF, false);
+		graphics.pose().popMatrix();
 	}
 
 	private boolean onNpcSwitch(double x, double y) {
@@ -472,12 +503,16 @@ public final class CraftScreen extends ContainerScreen {
 		int top = npcTop();
 		OverlayStyle.fillRounded(graphics, left, top, NPC_WIDTH, NPC_HEIGHT, NeuItems.BOX_COLOR);
 		NeuNpcs.extract(graphics, npc, left, top, left + NPC_WIDTH, top + NPC_HEIGHT, mouseX, mouseY);
+		Regions.Region region = Regions.at(npc.position());
+		extractNpcLabel(graphics, npcNameTop(), Component.literal(npc.name()).withStyle(net.minecraft.ChatFormatting.GOLD));
+		if (region != null) {
+			extractNpcLabel(graphics, npcAreaTop(), Component.literal(region.name()));
+		}
 		if (!onNpc(mouseX, mouseY)) {
 			return;
 		}
 		List<Component> lines = new ArrayList<>();
 		lines.add(Component.literal(npc.name()).withStyle(net.minecraft.ChatFormatting.GOLD));
-		Regions.Region region = Regions.at(npc.position());
 		if (region != null) {
 			lines.add(Component.translatable("screen.mccinfo.npc.zone", Component.literal(region.name()).withStyle(net.minecraft.ChatFormatting.WHITE))
 					.withStyle(net.minecraft.ChatFormatting.GRAY));

@@ -408,7 +408,7 @@ public final class NeuItems {
 
 	// Recipe Mode click on an item
 	private static boolean recipeClick(Screen screen, MouseButtonEvent event) {
-		if (ITEMS.isEmpty() || !PrivateKeys.RECIPE_MODE.held()
+		if (!ModConfig.get().mccJei || ITEMS.isEmpty() || !PrivateKeys.RECIPE_MODE.held()
 				|| (event.button() != GLFW.GLFW_MOUSE_BUTTON_LEFT && event.button() != GLFW.GLFW_MOUSE_BUTTON_RIGHT)) {
 			return false;
 		}
@@ -425,7 +425,7 @@ public final class NeuItems {
 
 	// Dim the inventory in Recipe Mode
 	private static void dimForRecipes(Screen screen, GuiGraphicsExtractor graphics) {
-		if (ITEMS.isEmpty() || !PrivateKeys.RECIPE_MODE.held() || !(screen instanceof AbstractContainerScreen<?> container)) {
+		if (!ModConfig.get().mccJei || ITEMS.isEmpty() || !PrivateKeys.RECIPE_MODE.held() || !(screen instanceof AbstractContainerScreen<?> container)) {
 			return;
 		}
 		ContainerHoveredSlotAccessor accessor = (ContainerHoveredSlotAccessor) screen;
@@ -784,8 +784,9 @@ public final class NeuItems {
 		return EXPANDED.contains(group.id()) == group.collapsed();
 	}
 
+	// Item list allowed
 	private static boolean available() {
-		return !ITEMS.isEmpty() && MccIsland.isConnected() && Permissions.has(Permissions.Perm.SEE_ITEMS);
+		return ModConfig.get().mccJei && !ITEMS.isEmpty() && MccIsland.isConnected() && Permissions.has(Permissions.Perm.SEE_ITEMS);
 	}
 
 	public static boolean shown() {
@@ -1158,10 +1159,11 @@ public final class NeuItems {
 		extractBox(graphics, font, box.left(), box.top(), box.right(), box.bottom(), text, hovered, enabled);
 	}
 
+	// Box with centered text
 	static void extractBox(GuiGraphicsExtractor graphics, Font font, int left, int top, int right, int bottom, Component text, boolean hovered,
 			boolean enabled) {
 		OverlayStyle.fillRounded(graphics, left, top, right - left, bottom - top, hovered && enabled ? HOVER_COLOR : BOX_COLOR);
-		graphics.text(font, text, (left + right - font.width(text)) / 2, top + (bottom - top - font.lineHeight) / 2 + 1,
+		graphics.text(font, text, (left + right - font.width(text) + 1) / 2, top + (bottom - top - font.lineHeight) / 2 + 1,
 				enabled ? TEXT_COLOR : DISABLED_COLOR, false);
 	}
 

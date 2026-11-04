@@ -417,6 +417,7 @@ public final class SpotSync {
 			com.google.gson.JsonObject auth = new com.google.gson.JsonObject();
 			auth.addProperty("type", "auth");
 			auth.addProperty("name", user.getName());
+			auth.addProperty("badge", ModUsers.showsBadge());
 			sendText(client, auth.toString());
 		}));
 	}

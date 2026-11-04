@@ -50,6 +50,7 @@
 		"accessor.ChatScreenAccessor",
 		"chat.ModChatLineMixin",
 		"chat.ChatItemTooltipMixin",
+		"chat.ChatItemAreaMixin",
 		"emote.SoundBufferLibraryMixin",
 		"emote.PlayerModelEmoteMixin",
 		"emote.ArmorStandEmoteMixin"

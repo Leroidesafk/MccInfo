@@ -95,6 +95,7 @@ public final class SettingsPanel {
 	static final int ICON_MONEY = 9;
 	static final int ICON_VOICE = 10;
 	static final int ICON_WIDGETS = 14;
+	static final int ICON_API_TOKEN = 15;
 	static final int NO_ICON = -1;
 	// Cards, controls, search and scroll layout
 	private static final int ICON_GAP = 4;
@@ -269,6 +270,13 @@ public final class SettingsPanel {
 	private final Supplier<List<Link>> links;
 	private final Runnable onNavigate;
 	private final Supplier<Page> footer;
+	private final Supplier<Page> bottomPage;
+	private static String requestedPage;
+
+	// Page opened from a card button, on the next frame
+	static void requestPage(String id) {
+		requestedPage = id;
+	}
 	private final Consumer<EditBox> focus;
 	private final Font font = Minecraft.getInstance().font;
 	private final List<Hit> hits = new ArrayList<>();
@@ -313,9 +321,11 @@ public final class SettingsPanel {
 	private int contentLeft;
 	private int viewportTop;
 
-	SettingsPanel(Supplier<List<List<Page>>> groups, Supplier<Page> footer, Supplier<List<Link>> links, Runnable onNavigate, Consumer<EditBox> focus) {
+	SettingsPanel(Supplier<List<List<Page>>> groups, Supplier<Page> footer, Supplier<Page> bottomPage, Supplier<List<Link>> links, Runnable onNavigate,
+			Consumer<EditBox> focus) {
 		this.groups = groups;
 		this.footer = footer;
+		this.bottomPage = bottomPage;
 		this.links = links;
 		this.onNavigate = onNavigate;
 		this.focus = focus;
@@ -419,9 +429,18 @@ public final class SettingsPanel {
 		this.tooltip = null;
 		List<List<Page>> groups = this.groups.get().stream().filter(group -> !group.isEmpty()).toList();
 		Page footer = this.footer.get();
+		Page bottomPage = this.bottomPage.get();
 		List<Page> pages = new ArrayList<>(groups.stream().flatMap(List::stream).toList());
+		if (bottomPage != null) {
+			pages.add(bottomPage);
+		}
 		if (footer != null) {
 			pages.add(footer);
+		}
+		String requested = requestedPage;
+		requestedPage = null;
+		if (requested != null && pages.stream().anyMatch(page -> page.id().equals(requested))) {
+			select(requested);
 		}
 		if (pages.stream().noneMatch(page -> page.id().equals(this.selected))) {
 			this.selected = pages.isEmpty() ? null : pages.getFirst().id();
@@ -429,8 +448,14 @@ public final class SettingsPanel {
 		int hoverX = this.dropdown != null ? Integer.MIN_VALUE : mouseX;
 		int hoverY = this.dropdown != null ? Integer.MIN_VALUE : mouseY;
 		extractSidebar(graphics, groups, hoverX, hoverY);
+		// Bottom of the left column: Admin or Moderator, Api Key above it
+		int y = this.bottom - BORDER - SIDEBAR_GAP - SIDEBAR_LINE;
 		if (footer != null) {
-			extractFooter(graphics, footer, hoverX, hoverY);
+			extractFooter(graphics, footer, y, hoverX, hoverY);
+			y -= SIDEBAR_GAP + 2 + SIDEBAR_GAP + SIDEBAR_LINE;
+		}
+		if (bottomPage != null) {
+			extractSidebarRow(graphics, bottomPage, y, hoverX, hoverY);
 		}
 		extractContent(graphics, pages, hoverX, hoverY);
 		if (this.dropdown != null) {
@@ -480,12 +505,16 @@ public final class SettingsPanel {
 	}
 
 	// Admin shortcut at the bottom
-	private void extractFooter(GuiGraphicsExtractor graphics, Page page, int mouseX, int mouseY) {
-		int x = this.left + BORDER + SIDEBAR_PADDING;
-		int width = this.sidebarRight - x;
-		int y = this.bottom - BORDER - SIDEBAR_GAP - SIDEBAR_LINE;
+	private void extractFooter(GuiGraphicsExtractor graphics, Page page, int y, int mouseX, int mouseY) {
 		int lineY = y - SIDEBAR_GAP - 2;
 		graphics.fill(this.left + BORDER, lineY, this.sidebarRight, lineY + 2, COLOR_OUTLINE);
+		extractSidebarRow(graphics, page, y, mouseX, mouseY);
+	}
+
+	// One page line of the left column
+	private void extractSidebarRow(GuiGraphicsExtractor graphics, Page page, int y, int mouseX, int mouseY) {
+		int x = this.left + BORDER + SIDEBAR_PADDING;
+		int width = this.sidebarRight - x;
 		boolean hovered = hovered(x, y, width, SIDEBAR_LINE, mouseX, mouseY);
 		float fade = fade("page:" + page.id(), hovered);
 		int color = page.id().equals(this.selected) ? COLOR_SELECTED : mix(COLOR_TEXT, COLOR_WHITE, fade);

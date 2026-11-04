@@ -98,7 +98,8 @@ public final class EventsScreen extends Screen {
 	private Tab tab = Tab.SETTINGS;
 	private int permissionChanges = Permissions.changes();
 	private final SettingsPages pages = new SettingsPages(this);
-	private final SettingsPanel settings = new SettingsPanel(this.pages::groups, this.pages::footer, this::links, this.pages::stopListening, this::setFocused);
+	// Settings tab: pages, Admin page, Api Key and links
+	private final SettingsPanel settings = new SettingsPanel(this.pages::groups, this.pages::footer, this.pages::apiToken, this::links, this.pages::stopListening, this::setFocused);
 	private MovableOverlay dragged;
 	private Corner resizeCorner;
 	private double dragOffsetX;

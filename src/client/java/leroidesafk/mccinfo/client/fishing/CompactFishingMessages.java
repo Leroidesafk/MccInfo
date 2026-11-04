@@ -46,8 +46,10 @@ public final class CompactFishingMessages {
 			"XP Magnet", "Fish Magnet", "Pearl Magnet", "Treasure Magnet", "Spirit Magnet", "Elusive Catch", "Supply Preserve");
 	private static final String ELUSIVE_CATCH = "Elusive Catch";
 	private static final String AUGMENT_SUFFIX = " Augment";
-	// Messages within 3 seconds of a catch join its line
+	// Catch grouping delays
 	private static final long SESSION_MILLIS = 3_000L;
+	private static final long BLOCK_MILLIS = 500L;
+	private static final long PENDING_MILLIS = 1_000L;
 	private static final int RECENT_CHAT_LINES = 10;
 	private static final int WHITE = 0xFFFFFF;
 	private static final int XP_COLOR = 0xAAAAAA;
@@ -55,6 +57,9 @@ public final class CompactFishingMessages {
 	private static Component current;
 	private static boolean inBox;
 	private static long lastMillis;
+	// Messages held until their catch arrives
+	private static final List<Component> pending = new ArrayList<>();
+	private static long pendingSince;
 
 	private record Segment(Style style, String text) {
 	}
@@ -102,12 +107,54 @@ public final class CompactFishingMessages {
 		}
 	}
 
-	// Adds a trigger or earning to the catch line, the full message on hover
+	// Adds a trigger or earning to the catch line, or holds it
 	static boolean absorb(Component message) {
-		if (current == null || System.currentTimeMillis() - lastMillis > SESSION_MILLIS) {
-			current = null;
+		Component addition = addition(message);
+		if (addition == null) {
 			return false;
 		}
+		long now = System.currentTimeMillis();
+		if (current != null && now - lastMillis <= BLOCK_MILLIS && attach(addition)) {
+			return true;
+		}
+		if (pending.isEmpty()) {
+			pendingSince = now;
+		}
+		pending.add(message);
+		return true;
+	}
+
+	// Held messages added to a new catch line
+	static Component withPending(Component message) {
+		if (pending.isEmpty() || !CAUGHT_PATTERN.matcher(message.getString()).find()) {
+			return message;
+		}
+		MutableComponent updated = message.copy();
+		for (Component held : pending) {
+			updated.append(Component.literal(" ")).append(addition(held));
+		}
+		pending.clear();
+		return updated;
+	}
+
+	// Held too long: previous catch, else shown as they are
+	static void tick() {
+		if (pending.isEmpty() || System.currentTimeMillis() - pendingSince <= PENDING_MILLIS) {
+			return;
+		}
+		List<Component> held = List.copyOf(pending);
+		pending.clear();
+		boolean attach = current != null && pendingSince - lastMillis <= SESSION_MILLIS;
+		for (Component message : held) {
+			if (!attach || !attach(addition(message))) {
+				attach = false;
+				FishingMessagesOverlay.display(message);
+			}
+		}
+	}
+
+	// Icon or earning, the full message on hover
+	private static Component addition(Component message) {
 		String text = message.getString();
 		Matcher trigger = TRIGGER_PATTERN.matcher(text);
 		Matcher earned = EARNED_PATTERN.matcher(text);
@@ -117,10 +164,14 @@ public final class CompactFishingMessages {
 		} else if (earned.find()) {
 			addition = earnedAddition(GLYPHS.matcher(earned.group(1)).replaceAll("").strip());
 		} else {
-			return false;
+			return null;
 		}
 		Style hover = Style.EMPTY.withHoverEvent(new HoverEvent.ShowText(message));
-		MutableComponent updated = current.copy().append(Component.literal(" ")).append(addition.copy().withStyle(style -> style.applyTo(hover)));
+		return addition.copy().withStyle(style -> style.applyTo(hover));
+	}
+
+	private static boolean attach(Component addition) {
+		MutableComponent updated = current.copy().append(Component.literal(" ")).append(addition);
 		if (!replace(current, updated)) {
 			current = null;
 			return false;

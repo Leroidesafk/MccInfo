@@ -7,6 +7,7 @@ import leroidesafk.mccinfo.client.gui.OverlayStyle;
 import leroidesafk.mccinfo.client.relay.Permissions;
 import leroidesafk.mccinfo.client.MccServer;
 import leroidesafk.mccinfo.Mccinfo;
+import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.message.v1.ClientReceiveMessageEvents;
 import net.minecraft.client.Minecraft;
 import net.minecraft.network.chat.Component;
@@ -121,6 +122,16 @@ public final class FishingMessagesOverlay {
 		OverlayStyle.registerHud(Mccinfo.id("fishing_messages"), BOX::extractHud);
 		// Runs on every server message before it reaches the chat
 		ClientReceiveMessageEvents.ALLOW_GAME.register(FishingMessagesOverlay::allowGameMessage);
+		ClientTickEvents.END_CLIENT_TICK.register(client -> CompactFishingMessages.tick());
+	}
+
+	// Held message shown in the box or the chat
+	static void display(Component message) {
+		if (!MOVABLE.enabled() || MOVABLE.hidden() || !OverlayStyle.onMccIsland() || !inAllowedInstance() || !isFishingMessage(message)) {
+			Minecraft.getInstance().gui.hud.getChat().addServerSystemMessage(message);
+			return;
+		}
+		add(message);
 	}
 
 	private static boolean allowGameMessage(Component message, boolean overlay) {
@@ -131,11 +142,11 @@ public final class FishingMessagesOverlay {
 		Component shown = message;
 		// Compact mode: merge the catch messages into one line
 		if (CompactFishingMessages.active()) {
-			// Already merged into the catch line: drop it
+			// Merged into the catch line or held: drop it
 			if (CompactFishingMessages.absorb(message)) {
 				return false;
 			}
-			shown = CompactFishingMessages.compact(message);
+			shown = CompactFishingMessages.withPending(CompactFishingMessages.compact(message));
 		}
 		// Box off or not a fishing message: leave it in the chat
 		if (!MOVABLE.enabled() || MOVABLE.hidden() || !OverlayStyle.onMccIsland() || !inAllowedInstance() || !isFishingMessage(message)) {

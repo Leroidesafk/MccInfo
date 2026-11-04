@@ -2,8 +2,10 @@ package leroidesafk.mccinfo.client.gui;
 
 import leroidesafk.mccinfo.client.ModConfig;
 import leroidesafk.mccinfo.client.PrivateKeys;
+import leroidesafk.mccinfo.client.chat.MccApi;
 import leroidesafk.mccinfo.client.chat.ModChat;
 import leroidesafk.mccinfo.client.fishing.FishCollectionScreen;
+import leroidesafk.mccinfo.client.relay.ModUsers;
 import leroidesafk.mccinfo.client.relay.Permissions;
 import leroidesafk.mccinfo.client.relay.SpotSync;
 import leroidesafk.mccinfo.client.voice.VoiceAdmin;
@@ -45,6 +47,10 @@ public final class SettingsPages {
 	// Key waiting for a new binding
 	private PrivateKeys.Key listening;
 	private boolean listeningPtt;
+	// Api Key field
+	private static final int TOKEN_MAX_LENGTH = 256;
+	private static final String NOXCREW_ACCOUNT_URL = "https://gateway.noxcrew.com/account";
+	private EditBox tokenBox;
 
 	SettingsPages(Screen screen) {
 		this.screen = screen;
@@ -71,16 +77,97 @@ public final class SettingsPages {
 		footerPage = page;
 	}
 
+	// Admin page, else Moderator page for the staff
 	SettingsPanel.Page footer() {
-		return footerPage == null ? null : footerPage.build(this);
+		SettingsPanel.Page page = footerPage == null ? null : footerPage.build(this);
+		if (page == null && Permissions.isStaff() && Permissions.isRegistered()) {
+			return moderator();
+		}
+		return page;
 	}
 
 	List<EditBox> footerInputs() {
-		return footerPage == null ? List.of() : footerPage.inputs();
+		List<EditBox> inputs = new ArrayList<>();
+		inputs.add(tokenBox());
+		if (footerPage != null) {
+			inputs.addAll(footerPage.inputs());
+		}
+		return inputs;
 	}
 
 	boolean submitFooter(EditBox box) {
+		if (box == this.tokenBox) {
+			saveToken();
+			return true;
+		}
 		return footerPage != null && footerPage.submit(box);
+	}
+
+	// Moderator page
+	private SettingsPanel.Page moderator() {
+		List<SettingsPanel.Card> moderation = List.of(SettingsPanel.Card.of("moderator_panel", text("screen.mccinfo.moderator.title"),
+				text("screen.mccinfo.settings.moderator_panel.open_description"),
+				new SettingsPanel.Action(() -> text("screen.mccinfo.settings.open"), KEY_WIDTH, () -> {
+					Minecraft client = Minecraft.getInstance();
+					client.gui.setScreen(new leroidesafk.mccinfo.client.moderator.ModeratorScreen(client.gui.screen()));
+				})));
+		List<SettingsPanel.Card> keys = PrivateKeys.MODERATOR_PANEL.usable() ? List.of(keyCard(PrivateKeys.MODERATOR_PANEL)) : List.of();
+		return new SettingsPanel.Page("moderator", text("screen.mccinfo.settings.moderator"), SettingsPanel.ICON_ADMIN, List.of(
+				new SettingsPanel.Section(text("screen.mccinfo.settings.section.moderation"), moderation),
+				new SettingsPanel.Section(text("screen.mccinfo.events.whitelist"), keys)));
+	}
+
+	// Key shown as stars when not focused
+	private EditBox tokenBox() {
+		if (this.tokenBox == null) {
+			this.tokenBox = new EditBox(Minecraft.getInstance().font, 0, 0, 40, 9, text("screen.mccinfo.settings.api_token.token"));
+			this.tokenBox.setBordered(false);
+			this.tokenBox.setMaxLength(TOKEN_MAX_LENGTH);
+			this.tokenBox.setValue(ModConfig.get().apiToken);
+			this.tokenBox.moveCursorToStart(false);
+			this.tokenBox.setHint(text("screen.mccinfo.settings.api_token.hint").copy().withColor(0xFF8C8C8C));
+			EditBox box = this.tokenBox;
+			this.tokenBox.addFormatter((value, offset) -> box.isFocused() ? null
+					: net.minecraft.util.FormattedCharSequence.forward("*".repeat(value.length()), Style.EMPTY));
+		}
+		return this.tokenBox;
+	}
+
+	private void saveToken() {
+		ModConfig config = ModConfig.get();
+		config.apiToken = tokenBox().getValue().strip();
+		config.save();
+		tokenBox().setValue(config.apiToken);
+		tokenBox().moveCursorToStart(false);
+		tokenBox().setFocused(false);
+		MccApi.check();
+	}
+
+	private void clearToken() {
+		tokenBox().setValue("");
+		saveToken();
+	}
+
+	// Api Key page
+	SettingsPanel.Page apiToken() {
+		String status = switch (MccApi.state()) {
+			case NONE -> "screen.mccinfo.settings.api_token.none";
+			case CHECKING -> "screen.mccinfo.settings.api_token.checking";
+			case VALID -> "screen.mccinfo.settings.api_token.valid";
+			case INVALID -> "screen.mccinfo.settings.api_token.invalid";
+			case UNREACHABLE -> "screen.mccinfo.settings.api_token.unreachable";
+		};
+		List<SettingsPanel.Card> cards = List.of(SettingsPanel.Card.of("api_token_get", text("screen.mccinfo.settings.api_token.get"),
+				text("screen.mccinfo.settings.api_token.get.description"),
+				new SettingsPanel.Action(() -> text("screen.mccinfo.settings.open"), KEY_WIDTH, () -> Util.getPlatform().openUri(NOXCREW_ACCOUNT_URL))),
+				SettingsPanel.Card.of("api_token",
+				text(status),
+				text("screen.mccinfo.settings.api_token.description"),
+				new SettingsPanel.Input(tokenBox()),
+				new SettingsPanel.Action(() -> text("screen.mccinfo.settings.api_token.save"), 0, this::saveToken),
+				new SettingsPanel.Action(() -> text("screen.mccinfo.settings.api_token.clear"), 0, this::clearToken)));
+		return new SettingsPanel.Page("api_token", text("screen.mccinfo.settings.api_token"), SettingsPanel.ICON_API_TOKEN, List.of(
+				new SettingsPanel.Section(text("screen.mccinfo.settings.api_token"), cards)));
 	}
 
 	Screen screen() {
@@ -160,7 +247,7 @@ public final class SettingsPages {
 		}
 		List<SettingsPanel.Card> keys = new ArrayList<>();
 		for (PrivateKeys.Key key : PrivateKeys.ALL) {
-			if (key.usable() && !key.admin) {
+			if (key.usable() && !key.admin && key != PrivateKeys.MODERATOR_PANEL) {
 				keys.add(keyCard(key));
 			}
 		}
@@ -180,7 +267,7 @@ public final class SettingsPages {
 		return key == this.listening ? Component.literal("> ").append(name.copy().withStyle(ChatFormatting.YELLOW)).append(" <") : name;
 	}
 
-	// Utils page: navigation, transitions and chat
+	// Utils page: navigation, display, transitions and chat
 	private SettingsPanel.Page utils() {
 		ModConfig config = ModConfig.get();
 		boolean utilsPerm = Permissions.has(Permissions.Perm.UTILS);
@@ -277,9 +364,32 @@ public final class SettingsPages {
 						})));
 			}
 		}
+		List<SettingsPanel.Card> display = new ArrayList<>();
+		if (utilsPerm) display.add(SettingsPanel.Card.of("mcc_jei", text("screen.mccinfo.settings.mcc_jei"),
+				text("screen.mccinfo.settings.mcc_jei.description"),
+				toggle(() -> config.mccJei, value -> {
+					config.mccJei = value;
+					config.save();
+				})));
+		if (utilsPerm) display.add(SettingsPanel.Card.of("show_mod_badge", text("screen.mccinfo.settings.show_mod_badge"),
+				text("screen.mccinfo.settings.show_mod_badge.description"),
+				toggle(() -> config.showModBadge, value -> {
+					config.showModBadge = value;
+					config.save();
+					ModUsers.sendPrefs();
+				})));
+		if (utilsPerm && config.showModBadge) {
+			display.add(SettingsPanel.Card.child("see_mod_badges", text("screen.mccinfo.settings.see_mod_badges"),
+					text("screen.mccinfo.settings.see_mod_badges.description"),
+					toggle(() -> config.seeModBadges, value -> {
+						config.seeModBadges = value;
+						config.save();
+					})));
+		}
 		List<SettingsPanel.Card> navigation = extraCards("utils.navigation");
 		return new SettingsPanel.Page("utils", text("screen.mccinfo.settings.utils"), SettingsPanel.ICON_UTILS, List.of(
 				new SettingsPanel.Section(text("screen.mccinfo.settings.section.navigation"), navigation),
+				new SettingsPanel.Section(text("screen.mccinfo.settings.section.display"), display),
 				new SettingsPanel.Section(text("screen.mccinfo.settings.section.transitions"), transitions),
 				new SettingsPanel.Section(text("screen.mccinfo.settings.section.chat"), chat)));
 	}

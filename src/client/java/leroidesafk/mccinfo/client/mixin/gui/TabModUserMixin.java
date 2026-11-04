@@ -14,7 +14,7 @@ public class TabModUserMixin {
 	// Mod user icon instead of the ping bars
 	@Inject(method = "extractPingIcon", at = @At("HEAD"), cancellable = true)
 	private void mccinfo$modUserIcon(GuiGraphicsExtractor graphics, int slotWidth, int xo, int yo, PlayerInfo info, CallbackInfo callback) {
-		net.minecraft.resources.Identifier badge = ModUsers.badge(info);
+		ModUsers.Badge badge = ModUsers.badge(info);
 		if (badge != null) {
 			ModUsers.extractIcon(graphics, badge, xo + slotWidth - 1, yo);
 			callback.cancel();

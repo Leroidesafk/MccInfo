@@ -146,6 +146,9 @@ public final class ModChat {
 	}
 
 	public static void register() {
+		ChatStyle.register();
+		MccApi.register();
+		ClientPlayConnectionEvents.JOIN.register((handler, sender, client) -> MccApi.check());
 		ScreenEvents.AFTER_INIT.register((client, screen, width, height) -> {
 			if (screen instanceof ChatScreen chatScreen) {
 				setOpen(true);
@@ -337,10 +340,6 @@ public final class ModChat {
 		if (staff) {
 			message.addProperty("channel", "staff");
 		}
-		String display = ownDisplay();
-		if (display != null) {
-			message.addProperty("display", display);
-		}
 		// Shared item from the clipboard
 		if (ITEM_TOKEN.matcher(trimmed).find()) {
 			JsonElement item = ItemClipboard.item();
@@ -360,14 +359,21 @@ public final class ModChat {
 		}
 	}
 
+	// Message from the relay, name styled by its profile
 	public static void receive(JsonObject object) {
 		if (!enabled() || !object.has("text") || !object.has("name")) {
+			return;
+		}
+		show(object, object.has("profile") && object.get("profile").isJsonObject() ? ChatStyle.profile(object.getAsJsonObject("profile")) : null);
+	}
+
+	private static void show(JsonObject object, MccApi.Profile profile) {
+		if (!enabled()) {
 			return;
 		}
 		String name = object.get("name").getAsString();
 		Minecraft client = Minecraft.getInstance();
 		boolean own = client.player != null && client.player.getGameProfile().name().equals(name);
-		Component display = object.has("display") && object.get("display").isJsonPrimitive() ? readDisplay(object.get("display").getAsString(), name) : null;
 		String text = object.get("text").getAsString();
 		String id = object.has("id") && object.get("id").isJsonPrimitive() ? object.get("id").getAsString() : null;
 		String uuid = object.has("uuid") && object.get("uuid").isJsonPrimitive() ? object.get("uuid").getAsString() : null;
@@ -377,13 +383,14 @@ public final class ModChat {
 			return;
 		}
 		// Icon, name, then the message
+		boolean styled = profile != null;
+		ItemStack item = object.has("item") && object.get("item").isJsonPrimitive() ? readItem(object.get("item").getAsString()) : ItemStack.EMPTY;
 		MutableComponent line = Component.empty()
 				.append(staffChannel ? STAFF_PREFIX : PREFIX)
 				.append(Component.literal(" "))
-				.append(display != null ? display : Component.literal(name).withStyle(ChatFormatting.WHITE))
+				.append(styled ? ChatStyle.name(name, profile) : Component.literal(name).withStyle(ChatFormatting.WHITE))
 				.append(Component.literal(": ").withStyle(ChatFormatting.WHITE))
-				.append(withItems(text, object.has("item") && object.get("item").isJsonPrimitive() ? readItem(object.get("item").getAsString()) : ItemStack.EMPTY,
-						display != null && Emojis.hasPlus(display, name)));
+				.append(withItems(text, item, styled && ChatStyle.hasPlus(profile), styled ? ChatStyle.messageColor(profile) : 0xFFFFFF));
 		ModMessage message = new ModMessage(staffChannel ? null : id, uuid, text, staff, line);
 		Component shown = decorate(message);
 		int channel = staffChannel ? STAFF : MCCINFO;
@@ -761,24 +768,6 @@ public final class ModChat {
 		return result;
 	}
 
-	private static Component readDisplay(String json, String name) {
-		Minecraft client = Minecraft.getInstance();
-		if (client.level == null || json.length() > MAX_DISPLAY_LENGTH) {
-			return null;
-		}
-		try {
-			RegistryOps<JsonElement> ops = RegistryOps.create(JsonOps.INSTANCE, client.level.registryAccess());
-			Component display = ComponentSerialization.CODEC.parse(ops, JsonParser.parseString(json)).result().orElse(null);
-			if (display == null || !display.getString().contains(name)) {
-				Mccinfo.LOGGER.warn("MccInfo chat: MCC Island name of {} refused ({})", name, display == null ? "unreadable" : display.getString());
-				return null;
-			}
-			return clean(display, 0);
-		} catch (RuntimeException e) {
-			return null;
-		}
-	}
-
 	private static MutableComponent clean(Component component, int depth) {
 		net.minecraft.network.chat.ComponentContents contents = component.getContents();
 		// No alignment dots
@@ -808,8 +797,8 @@ public final class ModChat {
 		}
 	}
 
-	private static Component withItems(String text, ItemStack stack, boolean emojis) {
-		MutableComponent result = Component.empty().withStyle(ChatFormatting.WHITE);
+	private static Component withItems(String text, ItemStack stack, boolean emojis, int color) {
+		MutableComponent result = Component.empty().withColor(color);
 		java.util.regex.Matcher matcher = ITEM_TOKEN.matcher(text);
 		int last = 0;
 		while (matcher.find()) {
@@ -956,7 +945,7 @@ public final class ModChat {
 		}
 
 		private int unreadWidth(Font font) {
-			return unreadCount() > 0 ? font.width(hud(String.valueOf(unreadCount()))) + PADDING * 2 + STACK_GAP : 0;
+			return unreadCount() > 0 ? font.width(hud(String.valueOf(unreadCount()))) - 1 + PADDING * 2 + STACK_GAP : 0;
 		}
 
 		private static Component hud(String text) {
@@ -984,7 +973,7 @@ public final class ModChat {
 			if (count > 0) {
 				Component countText = hud(String.valueOf(count));
 				int countX = x + this.width + STACK_GAP;
-				OverlayStyle.fillRounded(graphics, countX, y, font.width(countText) + PADDING * 2, this.height, UNREAD_COLOR);
+				OverlayStyle.fillRounded(graphics, countX, y, font.width(countText) - 1 + PADDING * 2, this.height, UNREAD_COLOR);
 				graphics.text(font, countText, countX + PADDING, y, 0xFFFFFFFF, false);
 			}
 		}

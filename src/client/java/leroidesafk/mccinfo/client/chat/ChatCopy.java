@@ -30,6 +30,9 @@ public final class ChatCopy {
 
 	private static GuiMessage hovered;
 	private static GuiMessage nextHovered;
+	// Line under the mouse, even with Copy Chat Messages off
+	private static GuiMessage underMouse;
+	private static GuiMessage nextUnderMouse;
 	private static final Vector2f MOUSE = new Vector2f(Float.NaN, Float.NaN);
 
 	private ChatCopy() {
@@ -39,9 +42,15 @@ public final class ChatCopy {
 		return ModConfig.get().chatCopy && Permissions.has(Permissions.Perm.UTILS);
 	}
 
+	public static GuiMessage messageUnderMouse() {
+		return underMouse;
+	}
+
 	public static void beginFrame(GuiGraphicsExtractor graphics, int mouseX, int mouseY) {
 		hovered = nextHovered;
 		nextHovered = null;
+		underMouse = nextUnderMouse;
+		nextUnderMouse = null;
 		Minecraft client = Minecraft.getInstance();
 		if (!enabled()) {
 			hovered = null;
@@ -70,11 +79,18 @@ public final class ChatCopy {
 		if (ModChat.deletedForStaff(line.parent())) {
 			graphics.fill(-4, entryTop, right, entryBottom, DELETED_COLOR);
 		}
-		if (Float.isNaN(MOUSE.x) || !enabled()) {
+		if (Float.isNaN(MOUSE.x)) {
 			return;
 		}
 		// Hover highlight
-		if (MOUSE.x >= -4 && MOUSE.x < right && MOUSE.y >= entryTop && MOUSE.y < entryBottom) {
+		boolean over = MOUSE.x >= -4 && MOUSE.x < right && MOUSE.y >= entryTop && MOUSE.y < entryBottom;
+		if (over) {
+			nextUnderMouse = line.parent();
+		}
+		if (!enabled()) {
+			return;
+		}
+		if (over) {
 			nextHovered = line.parent();
 		}
 		if (line.parent() == hovered) {

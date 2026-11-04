@@ -47,12 +47,17 @@ public final class ModConfig {
 	public int timerY = UNSET;
 	public boolean timerHidden;
 
-	// Other features and their boxes
+	// Other features
 	public boolean fishingMessages;
 	public boolean fishingMessagesFishingOnly;
 	public boolean compactFishingMessages;
 	public boolean neuItemsHidden;
+	public boolean mccJei = true;
+	public boolean showModBadge = true;
+	public boolean seeModBadges = true;
+	public String apiToken = "";
 	public int neuColumns;
+	// Fishing messages box
 	public int messagesX = UNSET;
 	public int messagesY = UNSET;
 	public int messagesWidth = UNSET;
@@ -60,6 +65,7 @@ public final class ModConfig {
 	public int messagesTextPixels = UNSET;
 	public boolean messagesHidden;
 
+	// Carnival tickets box and private keys
 	public int ticketsX = UNSET;
 	public int ticketsY = UNSET;
 	public boolean ticketsHidden;

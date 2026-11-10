@@ -9,6 +9,8 @@
 		"accessor.ChatBackgroundGraphicsAccessor",
 		"chat.ChatScreenMixin",
 		"gui.TabModUserMixin",
+		"gui.TabDotsNameMixin",
+		"gui.TabDotsGlyphMixin",
 		"accessor.ClientMannequinAccessor",
 		"accessor.ContainerHoveredSlotAccessor",
 		"items.ContainerSlotIconMixin",
@@ -37,6 +39,7 @@
 		"voice.VoiceSkinMixin",
 		"chat.EmojiEditBoxMixin",
 		"gui.HudTransitionMixin",
+		"gui.GuiScissorSizeMixin",
 		"gui.ScreenOpenGuiMixin",
 		"gui.ScreenOpenRenderStateMixin",
 		"gui.ScreenOpenTextMixin",
@@ -53,7 +56,9 @@
 		"chat.ChatItemAreaMixin",
 		"emote.SoundBufferLibraryMixin",
 		"emote.PlayerModelEmoteMixin",
-		"emote.ArmorStandEmoteMixin"
+		"emote.ArmorStandEmoteMixin",
+		"emote.InventoryBackpackMixin",
+		"emote.GuiEntityBackpackMixin"
 	],
 	"injectors": {
 		"defaultRequire": 1

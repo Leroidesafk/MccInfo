@@ -51,12 +51,18 @@ public final class ModConfig {
 	public boolean fishingMessages;
 	public boolean fishingMessagesFishingOnly;
 	public boolean compactFishingMessages;
+	public boolean bestIslandIcon = true;
+	public boolean badgeNotify;
+	public String badgeNotifyMode = "suggested";
+	public Set<String> badgeNotifyGames = new HashSet<>();
+	public String badgeNotifyPopularity = "high";
+	public boolean badgeNotifySound = true;
 	public boolean neuItemsHidden;
 	public boolean mccJei = true;
-	public boolean showModBadge = true;
 	public boolean seeModBadges = true;
 	public String apiToken = "";
 	public int neuColumns;
+	public List<String> neuFavorites = new ArrayList<>();
 	// Fishing messages box
 	public int messagesX = UNSET;
 	public int messagesY = UNSET;
@@ -77,8 +83,16 @@ public final class ModConfig {
 	public Map<String, String> overclocks = new HashMap<>();
 	public Map<String, Integer> equipmentBonuses = new HashMap<>();
 	public List<String> augments = new ArrayList<>();
+	public List<String> augmentUses = new ArrayList<>();
+	public List<Map<String, Integer>> augmentBonuses = new ArrayList<>();
 	public String bait;
+	public Integer baitUses;
+	public Map<String, Integer> baitBonuses = new HashMap<>();
 	public String line;
+	public Integer lineUses;
+	public Integer lineMaxUses;
+	public Map<String, Integer> lineBonuses = new HashMap<>();
+	public Set<String> lockedIslands = new HashSet<>();
 	public Set<String> collapsedSections = new HashSet<>();
 	public List<InventoryButton> inventoryButtons = new ArrayList<>();
 	public String lastPatchNote;
@@ -120,7 +134,13 @@ public final class ModConfig {
 	// Widgets and emotes
 	public boolean widgetDuels = true;
 	public boolean widgetWaypoints = true;
+	public List<List<String>> widgetWheels;
+	public Set<String> widgetSeen;
 	public boolean emoteSounds = true;
+	public boolean hideFirstPersonBackpack = true;
+	public boolean showInventoryBackpack;
+	public boolean hideTabDots = true;
+	public boolean parkourLimitTint = true;
 
 	// Voice chat notice already shown
 	public boolean voiceDisclaimerSeen;
@@ -141,6 +161,30 @@ public final class ModConfig {
 				ModConfig loaded = GSON.fromJson(Files.readString(PATH), ModConfig.class);
 				if (loaded != null) {
 					// Fields missing from older configs
+					if (loaded.augmentBonuses == null) {
+						loaded.augmentBonuses = new ArrayList<>();
+					}
+					if (loaded.augmentUses == null) {
+						loaded.augmentUses = new ArrayList<>();
+					}
+					if (loaded.baitBonuses == null) {
+						loaded.baitBonuses = new HashMap<>();
+					}
+					if (loaded.lineBonuses == null) {
+						loaded.lineBonuses = new HashMap<>();
+					}
+					if (loaded.badgeNotifyGames == null) {
+					loaded.badgeNotifyGames = new HashSet<>();
+				}
+				if (loaded.badgeNotifyMode == null) {
+					loaded.badgeNotifyMode = "suggested";
+				}
+				if (loaded.badgeNotifyPopularity == null) {
+					loaded.badgeNotifyPopularity = "high";
+				}
+				if (loaded.lockedIslands == null) {
+						loaded.lockedIslands = new HashSet<>();
+					}
 					if (loaded.tickets == null) {
 						loaded.tickets = new HashMap<>();
 					}

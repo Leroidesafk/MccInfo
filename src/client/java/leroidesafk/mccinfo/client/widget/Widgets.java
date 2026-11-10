@@ -16,6 +16,8 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
 
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -35,7 +37,9 @@ public final class Widgets {
 
 	// Known widgets, owned ones, names and emotes from the relay
 	private static final Map<String, Widget> KNOWN = new LinkedHashMap<>();
+	public static final int WHEEL_SLOTS = 8;
 	private static List<Widget> active = List.of();
+	private static List<Definition> owned = List.of();
 	private static PrivateKeys.Key wheelKey;
 	private static final Map<String, String> NAMES = new java.util.concurrent.ConcurrentHashMap<>();
 	private static final java.util.Set<String> EMOTES = java.util.concurrent.ConcurrentHashMap.newKeySet();
@@ -49,9 +53,9 @@ public final class Widgets {
 	private Widgets() {
 	}
 
+	// Wheel key, owned widgets from the relay
 	public static void register() {
-		// Wheel key, owned widgets from the relay
-		wheelKey = PrivateKeys.add("widgets_wheel", "key.mccinfo.widgets_wheel", false, () -> Permissions.has(Permissions.Perm.UTILS), InputConstants.UNKNOWN);
+		wheelKey = PrivateKeys.add("widgets_wheel", "key.mccinfo.widgets_wheel", false, () -> Permissions.has(Permissions.Perm.UTILS), InputConstants.UNKNOWN).in("widgets", null);
 		SpotSync.addHandler("widgets", Widgets::receive);
 		ClientTickEvents.END_CLIENT_TICK.register(client -> {
 			while (wheelKey.consumeClick()) {
@@ -61,6 +65,7 @@ public final class Widgets {
 			}
 		});
 		WidgetWaypoints.register();
+		RedeemCodes.register();
 	}
 
 	public static PrivateKeys.Key wheelKey() {
@@ -98,17 +103,107 @@ public final class Widgets {
 		return active;
 	}
 
+	public static List<Definition> owned() {
+		return owned;
+	}
+
+	public static Widget widget(String id) {
+		if (id == null || id.isEmpty()) {
+			return null;
+		}
+		for (Widget widget : active) {
+			if (widget.id().equals(id)) {
+				return widget;
+			}
+		}
+		return null;
+	}
+
+	public static List<String> emptyWheel() {
+		return new ArrayList<>(Collections.nCopies(WHEEL_SLOTS, ""));
+	}
+
+	// Custom wheels, else owned widgets in relay order
+	public static List<List<String>> wheels() {
+		List<List<String>> saved = ModConfig.get().widgetWheels;
+		List<List<String>> wheels = new ArrayList<>();
+		if (saved != null) {
+			for (List<String> wheel : saved) {
+				List<String> copy = emptyWheel();
+				for (int slot = 0; wheel != null && slot < Math.min(WHEEL_SLOTS, wheel.size()); slot++) {
+					copy.set(slot, wheel.get(slot) == null ? "" : wheel.get(slot));
+				}
+				wheels.add(copy);
+			}
+		} else {
+			for (int i = 0; i < active.size(); i += WHEEL_SLOTS) {
+				List<String> wheel = emptyWheel();
+				for (int slot = 0; slot < WHEEL_SLOTS && i + slot < active.size(); slot++) {
+					wheel.set(slot, active.get(i + slot).id());
+				}
+				wheels.add(wheel);
+			}
+		}
+		if (wheels.isEmpty()) {
+			wheels.add(emptyWheel());
+		}
+		return wheels;
+	}
+
+	public static void saveWheels(List<List<String>> wheels) {
+		List<List<String>> copy = new ArrayList<>();
+		for (List<String> wheel : wheels) {
+			copy.add(new ArrayList<>(wheel));
+		}
+		ModConfig.get().widgetWheels = copy;
+		ModConfig.get().save();
+	}
+
+	// New widgets go in the first free slot
+	private static void placeNew(List<Widget> list) {
+		ModConfig config = ModConfig.get();
+		if (config.widgetSeen == null) {
+			config.widgetSeen = new HashSet<>();
+		}
+		boolean changed = false;
+		if (config.widgetWheels != null) {
+			List<List<String>> wheels = wheels();
+			for (Widget widget : list) {
+				if (config.widgetSeen.contains(widget.id()) || wheels.stream().anyMatch(wheel -> wheel.contains(widget.id()))) {
+					continue;
+				}
+				List<String> target = wheels.stream().filter(wheel -> wheel.contains("")).findFirst().orElse(null);
+				if (target == null) {
+					target = emptyWheel();
+					wheels.add(target);
+				}
+				target.set(target.indexOf(""), widget.id());
+				changed = true;
+			}
+			if (changed) {
+				config.widgetWheels = wheels;
+			}
+		}
+		for (Widget widget : list) {
+			changed |= config.widgetSeen.add(widget.id());
+		}
+		if (changed) {
+			config.save();
+		}
+	}
+
 	private static void receive(JsonObject object) {
 		List<Widget> list = new ArrayList<>();
-		// Owned widgets, emotes included, in relay order
-		for (Definition definition : read(object.get("widgets"))) {
+		List<Definition> definitions = read(object.get("widgets"));
+		for (Definition definition : definitions) {
 			Widget widget = "emote".equals(definition.type()) ? emote(definition) : KNOWN.get(definition.id());
 			if (widget != null && !list.contains(widget)) {
 				list.add(widget);
 			}
 		}
+		owned = definitions;
 		active = List.copyOf(list);
-		// Tell the relay if duels are accepted
+		placeNew(active);
 		sendPrefs();
 	}
 
@@ -172,6 +267,7 @@ public final class Widgets {
 		return known(definition.id()) || "emote".equals(definition.type()) ? text : Component.translatable("screen.mccinfo.widgets.type.unsupported", text);
 	}
 
+	// Tell the relay if duels are accepted
 	public static void sendPrefs() {
 		JsonObject message = new JsonObject();
 		message.addProperty("type", "widget_prefs");

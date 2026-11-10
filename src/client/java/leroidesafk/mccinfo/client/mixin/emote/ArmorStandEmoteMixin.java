@@ -23,8 +23,12 @@ public class ArmorStandEmoteMixin {
 
 	// Applied before the armor stand is drawn
 	@Inject(method = "submit(Lnet/minecraft/client/renderer/entity/state/ArmorStandRenderState;Lcom/mojang/blaze3d/vertex/PoseStack;Lnet/minecraft/client/renderer/SubmitNodeCollector;Lnet/minecraft/client/renderer/state/level/CameraRenderState;)V",
-			at = @At("HEAD"))
+			at = @At("HEAD"), cancellable = true)
 	private void mccinfo$emoteSubmit(ArmorStandRenderState state, PoseStack poseStack, SubmitNodeCollector collector, CameraRenderState camera, CallbackInfo info) {
+		if (Emotes.hiddenPassenger(state)) {
+			info.cancel();
+			return;
+		}
 		Emotes.applyPassenger(state, poseStack);
 	}
 }

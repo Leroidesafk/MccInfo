@@ -38,8 +38,12 @@ public final class EmotePreviewRenderer extends PictureInPictureRenderer<EmotePr
 		this.dispatcher = dispatcher;
 	}
 
-	// Emote preview in a cell
+	// Emote preview in a cell, cut to its edges
 	public static void extract(GuiGraphicsExtractor graphics, String id, long since, int x0, int y0, int x1, int y1) {
+		extract(graphics, id, since, x0, y0, x1, y1, null);
+	}
+
+	public static void extract(GuiGraphicsExtractor graphics, String id, long since, int x0, int y0, int x1, int y1, ScreenRectangle scissor) {
 		Minecraft client = Minecraft.getInstance();
 		if (client.player == null) {
 			return;
@@ -58,14 +62,18 @@ public final class EmotePreviewRenderer extends PictureInPictureRenderer<EmotePr
 			living.walkAnimationSpeed = 0.0F;
 		}
 		Map<EmoteModel.Bone, Matrix4f> matrices = Map.of();
-		if (emote != null) {
-			double time = (System.nanoTime() - since) / 1.0E9;
-			matrices = EmoteRender.pose(emote, EmoteRender.phase(emote, time), emote.fill(new Molang.Scope()));
+		EmoteRender.Phase phase = emote == null ? null : EmoteRender.phase(emote, (System.nanoTime() - since) / 1.0E9);
+		// Finished emote: player only
+		if (phase == null) {
+			emote = null;
+		} else {
+			matrices = EmoteRender.pose(emote, phase, emote.fill(new Molang.Scope()));
 			Emotes.previewPose(player, emote, matrices);
 		}
 		float scale = (x1 - x0) / SCENE_WIDTH;
 		((GuiGraphicsExtractorAccessor) graphics).mccinfo$getGuiRenderState()
-				.addPicturesInPictureState(new State(player, emote, matrices, x0, y0, x1, y1, scale));
+				.addPicturesInPictureState(new State(player, emote, matrices, x0, y0, x1, y1, scale, scissor,
+						PictureInPictureRenderState.getBounds(x0, y0, x1, y1, scissor)));
 	}
 
 	@Override
@@ -86,7 +94,8 @@ public final class EmotePreviewRenderer extends PictureInPictureRenderer<EmotePr
 		this.dispatcher.submit(state.player(), camera, 0.0, 0.0, 0.0, pose, collector);
 		if (state.emote() != null) {
 			pose.scale(1.0F / 16.0F, 1.0F / 16.0F, 1.0F / 16.0F);
-			EmoteRender.submitModel(collector, pose, state.emote(), state.matrices(), EmoteRender.FULL_BRIGHT, new Quaternionf().rotateY((float) Math.toRadians(-TURN)));
+			EmoteRender.submitModel(collector, pose, state.emote(), state.matrices(), EmoteRender.FULL_BRIGHT, new Quaternionf().rotateY((float) Math.toRadians(-TURN)),
+					EmotePlayerIcon.icon(null));
 		}
 		pose.popPose();
 	}

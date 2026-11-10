@@ -22,6 +22,7 @@ import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.input.KeyEvent;
+import leroidesafk.mccinfo.client.PrivateKeys;
 import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.network.chat.Component;
 import org.lwjgl.glfw.GLFW;
@@ -449,7 +450,7 @@ public final class EventsScreen extends Screen {
 	@Override
 	public boolean mouseClicked(MouseButtonEvent event, boolean doubleClick) {
 		if (this.tab == Tab.SETTINGS && this.pages.listening()) {
-			this.pages.bind(InputConstants.Type.MOUSE.getOrCreate(event.button()));
+			this.pages.bind(InputConstants.Type.MOUSE.getOrCreate(event.button()), event.modifiers());
 			return true;
 		}
 		double virtualX = event.x() / scale();
@@ -514,9 +515,22 @@ public final class EventsScreen extends Screen {
 	}
 
 	@Override
+	public boolean keyReleased(KeyEvent event) {
+		if (this.tab == Tab.SETTINGS && this.pages.listening() && PrivateKeys.isModifierKey(event.key())) {
+			this.pages.bind(InputConstants.getKey(event), 0);
+			return true;
+		}
+		return super.keyReleased(event);
+	}
+
+	@Override
 	public boolean keyPressed(KeyEvent event) {
 		if (this.tab == Tab.SETTINGS && this.pages.listening()) {
-			this.pages.bind(event.key() == GLFW.GLFW_KEY_ESCAPE ? InputConstants.UNKNOWN : InputConstants.getKey(event));
+			if (event.key() == GLFW.GLFW_KEY_ESCAPE) {
+				this.pages.bind(InputConstants.UNKNOWN);
+			} else if (!PrivateKeys.isModifierKey(event.key())) {
+				this.pages.bind(InputConstants.getKey(event), event.modifiers());
+			}
 			return true;
 		}
 		if (this.tab == Tab.SETTINGS && event.isEscape() && this.settings.closeDropdown()) {

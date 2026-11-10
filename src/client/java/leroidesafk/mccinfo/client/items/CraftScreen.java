@@ -38,7 +38,7 @@ public final class CraftScreen extends ContainerScreen {
 	private static final int MAX_ROWS = 6;
 	private static final int TITLE_OVERHANG = 24;
 	private static final int BOTTOM_OVERHANG = 25;
-	private static final int RESULT_GAP = 12;
+	private static final int RESULT_GAP = 2;
 	private static final int PLAYER_INVENTORY_HEIGHT = 97;
 	private static final int RESULT_SCALE = 3;
 	private static final int TAB_COLUMNS = 4;
@@ -48,6 +48,9 @@ public final class CraftScreen extends ContainerScreen {
 	private static final int NPC_ARROW_WIDTH = 14;
 	private static final int NPC_LABEL_PADDING = 2;
 	private static final int NPC_LABEL_CAPS = 7;
+	private static final int UNAVAILABLE_PADDING = 4;
+	private static final int UNAVAILABLE_LINE = 10;
+	private static final int UNAVAILABLE_GAP = 3;
 	// Path to the NPC
 	private static final int NPC_PATH_COLOR = 0xFFAA00;
 	private static final Identifier NPC_WAYPOINT_ICON = Mccinfo.id("textures/gui/recipes/vendor.png");
@@ -112,7 +115,7 @@ public final class CraftScreen extends ContainerScreen {
 		Set<String> expanded = new HashSet<>();
 		String target = target(crafts.get(index), focus);
 		if (target != null) {
-			crafts.get(index).items().stream().filter(reward -> reward.bundle() != null && reward.contains(target))
+			crafts.get(index).items().stream().filter(reward -> reward.bundle() != null && !reward.bundle().random() && reward.contains(target))
 					.forEach(reward -> expanded.add(reward.bundle().id()));
 		}
 		return create(crafts, index, pageOf(crafts.get(index), target, expanded), parent, focus, expanded, 0);
@@ -263,7 +266,7 @@ public final class CraftScreen extends ContainerScreen {
 			if (slot >= 0 && slot < container.getContainerSize()) {
 				NeuCrafts.Reward reward = shown.get(first + i);
 				container.setItem(slot, NeuCrafts.rewardStack(reward));
-				if (reward.bundle() != null) {
+				if (reward.bundle() != null && !reward.bundle().random()) {
 					bundleSlots.put(slot, reward);
 				}
 				ItemStack badge = reward.item() == null ? null : NeuItems.badge(reward.item());
@@ -400,18 +403,25 @@ public final class CraftScreen extends ContainerScreen {
 	}
 
 	private int resultLeft() {
-		return this.leftPos - RESULT_GAP - RESULT_SIZE;
+		return sideLeft(RESULT_SIZE);
 	}
 
 	private int resultTop() {
 		return this.topPos + (this.imageHeight - PLAYER_INVENTORY_HEIGHT - RESULT_SIZE) / 2;
 	}
 
+	// No longer available box in place of the NPCs
+	private String unavailable() {
+		NeuCrafts.Craft craft = this.crafts.get(this.index);
+		NeuCrafts.Layout layout = craft.result() != null ? null : NeuCrafts.layout(craft);
+		return layout == null ? null : layout.unavailable();
+	}
+
 	// NPCs/entity of the vendor
 	private List<NeuNpcs.Npc> npcs() {
 		NeuCrafts.Craft craft = this.crafts.get(this.index);
 		NeuCrafts.Layout layout = craft.result() != null ? null : NeuCrafts.layout(craft);
-		if (layout == null) {
+		if (layout == null || layout.unavailable() != null) {
 			return List.of();
 		}
 		return layout.npcs().stream().map(NeuNpcs::get).filter(java.util.Objects::nonNull).toList();
@@ -438,6 +448,28 @@ public final class CraftScreen extends ContainerScreen {
 	}
 
 	// Text shrunk to fit the box
+	private void extractUnavailable(GuiGraphicsExtractor graphics, String reason) {
+		Component title = Component.translatable("screen.mccinfo.npc.unavailable").withStyle(net.minecraft.ChatFormatting.RED);
+		Component text = reason.isBlank() ? Component.translatable("screen.mccinfo.npc.unavailable.default") : Component.literal(reason);
+		int inner = NPC_WIDTH - UNAVAILABLE_PADDING * 2;
+		List<net.minecraft.util.FormattedCharSequence> titleLines = this.font.split(title, inner);
+		List<net.minecraft.util.FormattedCharSequence> lines = this.font.split(text.copy().withStyle(net.minecraft.ChatFormatting.GRAY), inner);
+		int height = UNAVAILABLE_PADDING * 2 + (titleLines.size() + lines.size()) * UNAVAILABLE_LINE + UNAVAILABLE_GAP;
+		int left = npcLeft();
+		int top = this.topPos + (this.imageHeight - PLAYER_INVENTORY_HEIGHT - height) / 2;
+		OverlayStyle.fillRounded(graphics, left, top, NPC_WIDTH, height, NeuItems.BOX_COLOR);
+		int y = top + UNAVAILABLE_PADDING;
+		for (net.minecraft.util.FormattedCharSequence line : titleLines) {
+			graphics.text(this.font, line, left + (NPC_WIDTH - this.font.width(line)) / 2, y, 0xFFFFFFFF, true);
+			y += UNAVAILABLE_LINE;
+		}
+		y += UNAVAILABLE_GAP;
+		for (net.minecraft.util.FormattedCharSequence line : lines) {
+			graphics.text(this.font, line, left + (NPC_WIDTH - this.font.width(line)) / 2, y, 0xFFFFFFFF, true);
+			y += UNAVAILABLE_LINE;
+		}
+	}
+
 	private void extractNpcLabel(GuiGraphicsExtractor graphics, int top, Component text) {
 		int left = npcLeft();
 		int width = this.font.width(text) - 1;
@@ -486,7 +518,11 @@ public final class CraftScreen extends ContainerScreen {
 	}
 
 	private int npcLeft() {
-		return this.leftPos - RESULT_GAP - NPC_WIDTH;
+		return sideLeft(NPC_WIDTH);
+	}
+
+	private int sideLeft(int width) {
+		return this.leftPos - RESULT_GAP - width;
 	}
 
 	private int npcTop() {
@@ -613,6 +649,10 @@ public final class CraftScreen extends ContainerScreen {
 					Component.translatable("screen.mccinfo.neu_items.page", this.index + 1, this.crafts.size()), false, true);
 			NeuItems.extractBox(graphics, this.font, right - width, top, right, bottom,
 					Component.translatable("screen.mccinfo.neu_items.next"), onNext(mouseX, mouseY), this.index < this.crafts.size() - 1);
+		}
+		String unavailable = unavailable();
+		if (unavailable != null) {
+			extractUnavailable(graphics, unavailable);
 		}
 		NeuNpcs.Npc npc = npc();
 		if (npc != null) {

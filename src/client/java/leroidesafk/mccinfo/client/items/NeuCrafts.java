@@ -51,17 +51,17 @@ public final class NeuCrafts {
 	record Icon(String item, Identifier texture, Identifier model) {
 	}
 
-	// Chest layout of a craft type
+	// Layout of a craft type or a vendor
 	public record Layout(String type, String title, JsonElement titleComponent, int size, List<Integer> slots, List<Fixed> fixed, Fixed previous, Fixed next,
-			Icon icon, List<String> npcs) {
+			Icon icon, List<String> npcs, String unavailable) {
 	}
 
 	// Price of an item
 	record Cost(String item, int count) {
 	}
 
-	// Rewards shown as one item
-	record Bundle(String id, String name, String icon, String color, List<String> description, List<Reward> items) {
+	// Bundle item listing its members
+	record Bundle(String id, String name, String icon, String color, List<String> description, List<Reward> items, boolean random) {
 	}
 
 	// Item of a craft: result, reward or item for sale
@@ -124,7 +124,7 @@ public final class NeuCrafts {
 		}
 	}
 
-	// Layout of a craft type or a vendor
+	// Chest layout of a craft type
 	private static Layout readLayout(String type, JsonObject object) {
 		List<Integer> slots = new ArrayList<>();
 		if (object.has("slots") && object.get("slots").isJsonArray()) {
@@ -146,8 +146,9 @@ public final class NeuCrafts {
 		} else if (object.has("npc") && object.get("npc").isJsonPrimitive()) {
 			npcs.add(object.get("npc").getAsString());
 		}
+		String unavailable = object.has("unavailable") && object.get("unavailable").isJsonPrimitive() ? object.get("unavailable").getAsString() : null;
 		return new Layout(type, title, object.get("titleComponent"), size, List.copyOf(slots), List.copyOf(fixed), previous, next, icon(object),
-				List.copyOf(npcs));
+				List.copyOf(npcs), unavailable);
 	}
 
 	private static Icon icon(JsonObject layout) {
@@ -228,7 +229,7 @@ public final class NeuCrafts {
 				JsonObject member = element.getAsJsonObject();
 				if (member.has("item")) {
 					members.add(new Reward(member.get("item").getAsString(), null, member.has("count") ? member.get("count").getAsInt() : 1,
-							null, null, null, null, List.of(), null, null));
+							member.has("chance") ? member.get("chance").getAsDouble() : null, null, null, null, List.of(), null, null));
 				}
 			}
 		}
@@ -238,11 +239,57 @@ public final class NeuCrafts {
 		}
 		String id = object.has("id") ? object.get("id").getAsString() : "?";
 		return new Bundle(id, object.has("name") ? object.get("name").getAsString() : id, object.has("icon") ? object.get("icon").getAsString() : null,
-				object.has("color") ? object.get("color").getAsString() : null, List.copyOf(description), List.copyOf(members));
+				object.has("color") ? object.get("color").getAsString() : null, List.copyOf(description), List.copyOf(members),
+				object.has("random") && object.get("random").getAsBoolean());
 	}
 
-	// Bundle item listing its members
+	// Random bundle: possible rewards and their chance
+	private static ItemStack randomStack(Bundle bundle) {
+		ItemStack icon = bundle.icon() == null ? ItemStack.EMPTY : NeuItems.stack(bundle.icon());
+		ItemStack stack = icon.isEmpty() ? unknown(bundle.name()) : icon.copyWithCount(1);
+		TextColor color = bundle.color() == null ? null : TextColor.parseColor(bundle.color()).result().orElse(null);
+		stack.remove(DataComponents.CUSTOM_NAME);
+		stack.set(DataComponents.ITEM_NAME, Component.literal(bundle.name())
+				.withStyle(style -> style.withColor(color != null ? color : TextColor.fromRgb(VALUE_COLOR)).withItalic(false)));
+		List<Component> lines = new ArrayList<>();
+		for (String line : bundle.description()) {
+			lines.add(Component.literal(line).withStyle(style -> style.withColor(LABEL_COLOR).withItalic(false)));
+		}
+		if (!lines.isEmpty()) {
+			lines.add(Component.empty());
+		}
+		lines.add(Component.literal("Possible Rewards:").withStyle(style -> style.withColor(CRAFT_LABEL_COLOR).withItalic(false)));
+		for (Reward member : bundle.items()) {
+			MutableComponent line = Component.empty().withStyle(style -> style.withColor(VALUE_COLOR).withItalic(false))
+					.append(Component.literal(" ▪ ").withStyle(style -> style.withColor(BULLET_COLOR)));
+			String glyph = NeuItems.costIcon(member.item());
+			if (glyph != null) {
+				line.append(String.format(Locale.US, "%,d", member.count()))
+						.append(Component.literal(glyph).withStyle(style -> style.withColor(VALUE_COLOR).withFont(new FontDescription.Resource(MCC_ICON_FONT))));
+			} else {
+				ItemStack item = NeuItems.stack(member.item());
+				Component name = item.isEmpty() ? Component.literal(member.item()) : item.getHoverName();
+				TextColor memberColor = name.getStyle().getColor();
+				if (member.count() > 1) {
+					line.append(String.format(Locale.US, "%,d ", member.count()));
+				}
+				line.append(Component.literal("[" + name.getString() + "]")
+						.withStyle(style -> style.withColor(memberColor != null ? memberColor : TextColor.fromRgb(VALUE_COLOR))));
+			}
+			if (member.chance() != null) {
+				line.append(" - " + BigDecimal.valueOf(member.chance()).stripTrailingZeros().toPlainString() + "%");
+			}
+			lines.add(line);
+		}
+		stack.set(DataComponents.LORE, new ItemLore(lines));
+		return stack;
+	}
+
+	// Rewards shown as one item
 	private static ItemStack bundleStack(Bundle bundle) {
+		if (bundle.random()) {
+			return randomStack(bundle);
+		}
 		ItemStack icon = bundle.icon() == null ? ItemStack.EMPTY : NeuItems.stack(bundle.icon());
 		ItemStack stack = icon.isEmpty() ? unknown(bundle.name()) : icon.copy();
 		TextColor iconColor = stack.getHoverName().getStyle().getColor();
@@ -448,7 +495,7 @@ public final class NeuCrafts {
 	}
 
 	// Placeholder for an item the mod does not have
-	private static ItemStack unknown(String name) {
+	public static ItemStack unknown(String name) {
 		ItemStack stack = new ItemStack(Items.PAPER);
 		stack.set(DataComponents.ITEM_MODEL, UNKNOWN_MODEL);
 		stack.set(DataComponents.ITEM_NAME, Component.literal(name == null ? "?" : name).withStyle(style -> style.withColor(VALUE_COLOR).withItalic(false)));

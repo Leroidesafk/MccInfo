@@ -73,6 +73,14 @@ public final class SettingsPages {
 		GENERAL_CARDS.add(card);
 	}
 
+	private static final List<Supplier<List<EditBox>>> EXTRA_INPUTS = new ArrayList<>();
+	private static final List<java.util.function.Predicate<EditBox>> EXTRA_SUBMITS = new ArrayList<>();
+
+	static void addInputs(Supplier<List<EditBox>> inputs, java.util.function.Predicate<EditBox> submit) {
+		EXTRA_INPUTS.add(inputs);
+		EXTRA_SUBMITS.add(submit);
+	}
+
 	static void setFooterPage(FooterPage page) {
 		footerPage = page;
 	}
@@ -92,6 +100,9 @@ public final class SettingsPages {
 		if (footerPage != null) {
 			inputs.addAll(footerPage.inputs());
 		}
+		for (Supplier<List<EditBox>> extra : EXTRA_INPUTS) {
+			inputs.addAll(extra.get());
+		}
 		return inputs;
 	}
 
@@ -100,7 +111,10 @@ public final class SettingsPages {
 			saveToken();
 			return true;
 		}
-		return footerPage != null && footerPage.submit(box);
+		if (footerPage != null && footerPage.submit(box)) {
+			return true;
+		}
+		return EXTRA_SUBMITS.stream().anyMatch(submit -> submit.test(box));
 	}
 
 	// Moderator page
@@ -189,8 +203,9 @@ public final class SettingsPages {
 		if (Permissions.has(Permissions.Perm.SEE_MAP) || Permissions.has(Permissions.Perm.UTILS)) {
 			utils.add(fishing());
 		}
-		if (Permissions.has(Permissions.Perm.UTILS)) {
-			utils.add(utils());
+		List<SettingsPanel.Section> utilsExtra = extraSections("utils");
+		if (Permissions.has(Permissions.Perm.UTILS) || !utilsExtra.isEmpty()) {
+			utils.add(utils(utilsExtra));
 		}
 		if (Permissions.has(Permissions.Perm.VOICE_CHAT)) {
 			utils.add(voiceChat());
@@ -207,8 +222,12 @@ public final class SettingsPages {
 	}
 
 	void bind(InputConstants.Key key) {
+		bind(key, 0);
+	}
+
+	void bind(InputConstants.Key key, int modifiers) {
 		if (this.listening != null) {
-			this.listening.set(key);
+			this.listening.set(key, modifiers);
 			this.listening = null;
 		}
 		if (this.listeningPtt) {
@@ -248,7 +267,7 @@ public final class SettingsPages {
 		List<SettingsPanel.Card> keys = new ArrayList<>();
 		for (PrivateKeys.Key key : PrivateKeys.ALL) {
 			if (key.usable() && !key.admin && key != PrivateKeys.MODERATOR_PANEL) {
-				keys.add(keyCard(key));
+				keys.add(keyCard(key, true));
 			}
 		}
 		return new SettingsPanel.Page("keybinds", text("screen.mccinfo.events.whitelist"), SettingsPanel.ICON_KEYBINDS, List.of(
@@ -257,18 +276,43 @@ public final class SettingsPages {
 				new SettingsPanel.Section(text("screen.mccinfo.events.whitelist"), keys)));
 	}
 
+	// Keys with a link to their page
+	private record PageInfo(int icon, String name) {
+	}
+
+	private static final java.util.Map<String, PageInfo> KEY_PAGES = java.util.Map.of(
+			"utils", new PageInfo(SettingsPanel.ICON_UTILS, "screen.mccinfo.settings.utils"),
+			"widgets", new PageInfo(SettingsPanel.ICON_WIDGETS, "screen.mccinfo.settings.widgets"),
+			"voice_chat", new PageInfo(SettingsPanel.ICON_VOICE, "screen.mccinfo.settings.voice_chat"),
+			"fishing", new PageInfo(SettingsPanel.ICON_FISHING, "screen.mccinfo.events.fishing"));
+
 	SettingsPanel.Card keyCard(PrivateKeys.Key key) {
-		return SettingsPanel.Card.of("key_" + key.id, text(key.translationKey), Component.empty(),
-				new SettingsPanel.Action(() -> keyLabel(key), KEY_WIDTH, () -> this.listening = key));
+		return keyCard(key, false);
+	}
+
+	private SettingsPanel.Card keyCard(PrivateKeys.Key key, boolean linked) {
+		SettingsPanel.Action bind = new SettingsPanel.Action(() -> keyLabel(key), KEY_WIDTH, () -> this.listening = key);
+		PageInfo page = !linked || key.page == null ? null : KEY_PAGES.get(key.page);
+		if (page == null) {
+			return SettingsPanel.Card.of("key_" + key.id, text(key.translationKey), Component.empty(), bind);
+		}
+		String section = key.section == null ? null : text(key.section).getString();
+		SettingsPanel.PageLink link = new SettingsPanel.PageLink(page.icon(), key.page, section,
+				() -> Component.translatable("screen.mccinfo.settings.go_to", text(page.name())));
+		return SettingsPanel.Card.of("key_" + key.id, text(key.translationKey), Component.empty(), link, bind);
 	}
 
 	private Component keyLabel(PrivateKeys.Key key) {
-		Component name = key.key().getDisplayName();
-		return key == this.listening ? Component.literal("> ").append(name.copy().withStyle(ChatFormatting.YELLOW)).append(" <") : name;
+		if (key != this.listening) {
+			return key.displayName();
+		}
+		int held = PrivateKeys.heldModifiers(net.minecraft.client.Minecraft.getInstance().getWindow());
+		Component name = held != 0 ? PrivateKeys.modifiersName(held).copy().append("...") : key.displayName();
+		return Component.literal("> ").append(name.copy().withStyle(ChatFormatting.YELLOW)).append(" <");
 	}
 
-	// Utils page: navigation, display, transitions and chat
-	private SettingsPanel.Page utils() {
+	// Utils page: badges, navigation, display, transitions and chat
+	private SettingsPanel.Page utils(List<SettingsPanel.Section> extra) {
 		ModConfig config = ModConfig.get();
 		boolean utilsPerm = Permissions.has(Permissions.Perm.UTILS);
 		List<SettingsPanel.Card> transitions = new ArrayList<>();
@@ -365,21 +409,38 @@ public final class SettingsPages {
 			}
 		}
 		List<SettingsPanel.Card> display = new ArrayList<>();
+		display.add(SettingsPanel.Card.of("hide_first_person_backpack", text("screen.mccinfo.settings.hide_first_person_backpack"),
+				text("screen.mccinfo.settings.hide_first_person_backpack.description"),
+				toggle(() -> config.hideFirstPersonBackpack, value -> {
+					config.hideFirstPersonBackpack = value;
+					config.save();
+				})));
+		display.add(SettingsPanel.Card.of("show_inventory_backpack", text("screen.mccinfo.settings.show_inventory_backpack"),
+				text("screen.mccinfo.settings.show_inventory_backpack.description"),
+				toggle(() -> config.showInventoryBackpack, value -> {
+					config.showInventoryBackpack = value;
+					config.save();
+				})));
+		display.add(SettingsPanel.Card.of("hide_tab_dots", text("screen.mccinfo.settings.hide_tab_dots"),
+				text("screen.mccinfo.settings.hide_tab_dots.description"),
+				toggle(() -> config.hideTabDots, value -> {
+					config.hideTabDots = value;
+					config.save();
+				})));
+		display.add(SettingsPanel.Card.of("parkour_limit_tint", text("screen.mccinfo.settings.parkour_limit_tint"),
+				text("screen.mccinfo.settings.parkour_limit_tint.description"),
+				toggle(() -> config.parkourLimitTint, value -> {
+					config.parkourLimitTint = value;
+					config.save();
+				})));
 		if (utilsPerm) display.add(SettingsPanel.Card.of("mcc_jei", text("screen.mccinfo.settings.mcc_jei"),
 				text("screen.mccinfo.settings.mcc_jei.description"),
 				toggle(() -> config.mccJei, value -> {
 					config.mccJei = value;
 					config.save();
 				})));
-		if (utilsPerm) display.add(SettingsPanel.Card.of("show_mod_badge", text("screen.mccinfo.settings.show_mod_badge"),
-				text("screen.mccinfo.settings.show_mod_badge.description"),
-				toggle(() -> config.showModBadge, value -> {
-					config.showModBadge = value;
-					config.save();
-					ModUsers.sendPrefs();
-				})));
-		if (utilsPerm && config.showModBadge) {
-			display.add(SettingsPanel.Card.child("see_mod_badges", text("screen.mccinfo.settings.see_mod_badges"),
+		if (utilsPerm) {
+			display.add(SettingsPanel.Card.of("see_mod_badges", text("screen.mccinfo.settings.see_mod_badges"),
 					text("screen.mccinfo.settings.see_mod_badges.description"),
 					toggle(() -> config.seeModBadges, value -> {
 						config.seeModBadges = value;
@@ -387,14 +448,85 @@ public final class SettingsPages {
 					})));
 		}
 		List<SettingsPanel.Card> navigation = extraCards("utils.navigation");
-		return new SettingsPanel.Page("utils", text("screen.mccinfo.settings.utils"), SettingsPanel.ICON_UTILS, List.of(
-				new SettingsPanel.Section(text("screen.mccinfo.settings.section.navigation"), navigation),
-				new SettingsPanel.Section(text("screen.mccinfo.settings.section.display"), display),
-				new SettingsPanel.Section(text("screen.mccinfo.settings.section.transitions"), transitions),
-				new SettingsPanel.Section(text("screen.mccinfo.settings.section.chat"), chat)));
+		List<SettingsPanel.Card> badges = new ArrayList<>();
+		MccApi.KeyState keyState = MccApi.state();
+		if (keyState == MccApi.KeyState.NONE || keyState == MccApi.KeyState.INVALID) {
+			badges.add(SettingsPanel.Card.warning("badges", text("screen.mccinfo.badges.title"), text("screen.mccinfo.settings.fish_collection.no_key")));
+		} else {
+			badges.add(SettingsPanel.Card.of("badges", text("screen.mccinfo.badges.title"), text("screen.mccinfo.settings.badges.description"),
+					new SettingsPanel.Action(() -> text("screen.mccinfo.settings.open"), KEY_WIDTH,
+							() -> Minecraft.getInstance().gui.setScreen(new leroidesafk.mccinfo.client.badges.BadgesScreen(this.screen)))));
+			badges.addAll(badgeNotifyCards(config));
+		}
+		List<SettingsPanel.Section> sections = new ArrayList<>();
+		if (utilsPerm) {
+			sections.add(new SettingsPanel.Section(text("screen.mccinfo.settings.section.badges"), badges));
+			sections.add(new SettingsPanel.Section(text("screen.mccinfo.settings.section.navigation"), navigation));
+			sections.add(new SettingsPanel.Section(text("screen.mccinfo.settings.section.display"), display));
+			sections.add(new SettingsPanel.Section(text("screen.mccinfo.settings.section.transitions"), transitions));
+			sections.add(new SettingsPanel.Section(text("screen.mccinfo.settings.section.chat"), chat));
+		}
+		sections.addAll(extra);
+		return new SettingsPanel.Page("utils", text("screen.mccinfo.settings.utils"), SettingsPanel.ICON_UTILS, sections);
 	}
 
 	// Widgets page
+	private List<SettingsPanel.Card> badgeNotifyCards(ModConfig config) {
+		List<SettingsPanel.Card> cards = new ArrayList<>();
+		cards.add(SettingsPanel.Card.of("badge_notify", text("screen.mccinfo.settings.badge_notify"), text("screen.mccinfo.settings.badge_notify.description"),
+				toggle(() -> config.badgeNotify, value -> {
+					config.badgeNotify = value;
+					config.save();
+				})));
+		if (!config.badgeNotify) {
+			return cards;
+		}
+		List<String> modes = List.of(leroidesafk.mccinfo.client.badges.BadgeNotifier.MODE_SUGGESTED, leroidesafk.mccinfo.client.badges.BadgeNotifier.MODE_GAMES);
+		cards.add(SettingsPanel.Card.child("badge_notify_mode", text("screen.mccinfo.settings.badge_notify_mode"), text("screen.mccinfo.settings.badge_notify_mode.description"),
+				dropdown(() -> text("screen.mccinfo.settings.badge_notify_mode." + config.badgeNotifyMode), modes,
+						mode -> text("screen.mccinfo.settings.badge_notify_mode." + mode), value -> {
+							config.badgeNotifyMode = value;
+							config.save();
+						})));
+		if (leroidesafk.mccinfo.client.badges.BadgeNotifier.MODE_GAMES.equals(config.badgeNotifyMode)) {
+			cards.add(new SettingsPanel.Card("badge_notify_games", text("screen.mccinfo.settings.badge_notify_games"),
+					text("screen.mccinfo.settings.badge_notify_games.description"), List.of(), () -> leroidesafk.mccinfo.client.badges.Badges.modes().stream()
+							.filter(mode -> mode.queue() != null)
+							.map(mode -> new SettingsPanel.Chip(Component.literal(mode.name()).withStyle(config.badgeNotifyGames.contains(mode.id())
+									? ChatFormatting.WHITE : ChatFormatting.DARK_GRAY), () -> {
+										if (!config.badgeNotifyGames.remove(mode.id())) {
+											config.badgeNotifyGames.add(mode.id());
+										}
+										config.save();
+									}, leroidesafk.mccinfo.client.badges.Badges.modeIcon(mode), false)).toList(), null, 1, false, false));
+		}
+		List<String> all = leroidesafk.mccinfo.client.badges.Badges.popularityLevels();
+		List<String> levels = all.size() > 1 ? all.subList(1, all.size()) : all;
+		cards.add(SettingsPanel.Card.child("badge_notify_popularity", text("screen.mccinfo.settings.badge_notify_popularity"),
+				text("screen.mccinfo.settings.badge_notify_popularity.description"),
+				dropdown(() -> leroidesafk.mccinfo.client.badges.Badges.levelName(config.badgeNotifyPopularity), levels,
+						leroidesafk.mccinfo.client.badges.Badges::levelName, value -> {
+					config.badgeNotifyPopularity = value;
+					config.save();
+				})));
+		cards.add(SettingsPanel.Card.child("badge_notify_sound", text("screen.mccinfo.settings.badge_notify_sound"),
+				text("screen.mccinfo.settings.badge_notify_sound.description"), toggle(() -> config.badgeNotifySound, value -> {
+					config.badgeNotifySound = value;
+					config.save();
+				})));
+		return cards;
+	}
+
+	private static String words(String key) {
+		StringBuilder text = new StringBuilder();
+		for (String word : key.split("_")) {
+			if (!word.isEmpty()) {
+				text.append(text.isEmpty() ? "" : " ").append(Character.toUpperCase(word.charAt(0))).append(word.substring(1));
+			}
+		}
+		return text.toString();
+	}
+
 	private SettingsPanel.Page widgets() {
 		ModConfig config = ModConfig.get();
 		List<SettingsPanel.Card> cards = List.of(
@@ -614,14 +746,25 @@ public final class SettingsPages {
 		}
 		display.addAll(extraCards("fishing.display"));
 
-		List<SettingsPanel.Card> debug = !utilsPerm ? List.of() : List.of(SettingsPanel.Card.of("fish_collection", text("screen.mccinfo.events.fish_collection"),
-				text("screen.mccinfo.settings.fish_collection.description"),
-				new SettingsPanel.Action(() -> text("screen.mccinfo.settings.open"), KEY_WIDTH, () -> Minecraft.getInstance().gui.setScreen(new FishCollectionScreen(this.screen)))));
+		MccApi.KeyState keyState = MccApi.state();
+		boolean noKey = keyState == MccApi.KeyState.NONE || keyState == MccApi.KeyState.INVALID;
+		List<SettingsPanel.Card> collection = new ArrayList<>();
+		if (utilsPerm) {
+			collection.add(noKey
+					? SettingsPanel.Card.warning("fish_collection", text("screen.mccinfo.events.fish_collection"),
+							text("screen.mccinfo.settings.fish_collection.no_key"))
+					: SettingsPanel.Card.of("fish_collection", text("screen.mccinfo.events.fish_collection"),
+							text("screen.mccinfo.settings.fish_collection.description"),
+							new SettingsPanel.Action(() -> text("screen.mccinfo.settings.open"), KEY_WIDTH, () -> Minecraft.getInstance().gui.setScreen(new FishCollectionScreen(this.screen)))));
+			collection.add(SettingsPanel.Card.of("best_island_icon", text("screen.mccinfo.settings.best_island_icon"),
+					text("screen.mccinfo.settings.best_island_icon.description"),
+					toggle(() -> config.bestIslandIcon, value -> config.bestIslandIcon = value)));
+		}
 
 		List<SettingsPanel.Section> sections = new ArrayList<>();
+		sections.add(new SettingsPanel.Section(text("screen.mccinfo.settings.section.collection"), collection));
 		sections.add(new SettingsPanel.Section(text("screen.mccinfo.settings.section.display"), display));
 		sections.addAll(extraSections("fishing"));
-		sections.add(new SettingsPanel.Section(text("screen.mccinfo.settings.section.debug"), debug));
 		return new SettingsPanel.Page("fishing", text("screen.mccinfo.events.fishing"), SettingsPanel.ICON_FISHING, sections);
 	}
 

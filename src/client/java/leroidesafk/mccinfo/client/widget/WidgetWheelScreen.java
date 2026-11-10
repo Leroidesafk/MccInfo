@@ -58,12 +58,27 @@ public final class WidgetWheelScreen extends Screen implements MenuBackdrop.Host
 		int virtualWidth = (int) (this.width / this.scale);
 		int virtualHeight = (int) (this.height / this.scale);
 		this.gridLeft = (virtualWidth - GRID) / 2;
-		this.gridTop = (virtualHeight - GRID) / 2 + (TITLE_HEIGHT + TITLE_GAP) / 2;
+		this.gridTop = (virtualHeight - GRID) / 2;
 		this.page = Math.clamp(this.page, 0, pages() - 1);
 	}
 
+	void showPage(int page) {
+		this.page = page;
+	}
+
 	private int pages() {
-		return Math.max(1, (Widgets.active().size() + PER_PAGE - 1) / PER_PAGE);
+		return Widgets.wheels().size();
+	}
+
+	private static boolean empty() {
+		for (List<String> wheel : Widgets.wheels()) {
+			for (String id : wheel) {
+				if (Widgets.widget(id) != null) {
+					return false;
+				}
+			}
+		}
+		return true;
 	}
 
 	// 8 cells around an empty center
@@ -86,10 +101,30 @@ public final class WidgetWheelScreen extends Screen implements MenuBackdrop.Host
 		return -1;
 	}
 
+	// Widget of a slot in the shown wheel
 	private Widgets.Widget widgetAt(int slot) {
-		List<Widgets.Widget> widgets = Widgets.active();
-		int index = this.page * PER_PAGE + slot;
-		return slot >= 0 && index < widgets.size() ? widgets.get(index) : null;
+		List<List<String>> wheels = Widgets.wheels();
+		if (slot < 0 || slot >= PER_PAGE || this.page >= wheels.size()) {
+			return null;
+		}
+		return Widgets.widget(wheels.get(this.page).get(slot));
+	}
+
+	// Edit button under the grid
+	private Component editLabel() {
+		return Component.translatable("screen.mccinfo.widgets.edit");
+	}
+
+	private int editWidth() {
+		return Math.round(this.font.width(editLabel()) * TEXT_SCALE) + TITLE_PADDING * 2;
+	}
+
+	private int editX() {
+		return this.gridLeft + (GRID - editWidth()) / 2;
+	}
+
+	private int editY() {
+		return this.gridTop + GRID + TITLE_GAP;
 	}
 
 	private int arrowY() {
@@ -104,6 +139,7 @@ public final class WidgetWheelScreen extends Screen implements MenuBackdrop.Host
 		return this.gridLeft + GRID + ARROW_GAP;
 	}
 
+	// Arrows only when there is another page
 	private boolean hasPrevious() {
 		return this.page > 0;
 	}
@@ -172,18 +208,23 @@ public final class WidgetWheelScreen extends Screen implements MenuBackdrop.Host
 				NeuItems.pointer(graphics);
 			}
 		}
-		if (Widgets.active().isEmpty()) {
+		if (empty()) {
 			Component empty = Component.translatable("screen.mccinfo.widgets.empty");
 			graphics.text(this.font, empty, this.gridLeft + (GRID - this.font.width(empty)) / 2, this.gridTop + (GRID - this.font.lineHeight) / 2 + 1,
 					COLOR_EMPTY_TEXT, true);
 		}
 
-		// Arrows only when there is another page
 		if (hasPrevious()) {
 			arrow(graphics, "<", leftArrowX(), virtualX, virtualY);
 		}
 		if (hasNext()) {
 			arrow(graphics, ">", rightArrowX(), virtualX, virtualY);
+		}
+		boolean overEdit = inside(virtualX, virtualY, editX(), editY(), editWidth(), TITLE_HEIGHT);
+		graphics.fill(editX(), editY(), editX() + editWidth(), editY() + TITLE_HEIGHT, overEdit ? COLOR_BOX_HOVER : COLOR_BOX);
+		scaledText(graphics, editLabel(), editX() + TITLE_PADDING, editY() + (TITLE_HEIGHT - this.font.lineHeight * TEXT_SCALE) / 2.0F + 1.0F);
+		if (overEdit) {
+			NeuItems.pointer(graphics);
 		}
 		if (tooltip != null) {
 			nameTooltip(graphics, Widgets.name(tooltip.id()), virtualX, virtualY);
@@ -230,9 +271,14 @@ public final class WidgetWheelScreen extends Screen implements MenuBackdrop.Host
 		}
 	}
 
+	private float snap(float value) {
+		float pixels = (float) this.minecraft.getWindow().getGuiScale() * this.scale;
+		return Math.round(value * pixels) / pixels;
+	}
+
 	private void scaledText(GuiGraphicsExtractor graphics, Component text, float x, float y) {
 		graphics.pose().pushMatrix();
-		graphics.pose().translate(x, y);
+		graphics.pose().translate(snap(x), snap(y));
 		graphics.pose().scale(TEXT_SCALE, TEXT_SCALE);
 		graphics.text(this.font, text, 0, 0, COLOR_TEXT, true);
 		graphics.pose().popMatrix();
@@ -253,6 +299,11 @@ public final class WidgetWheelScreen extends Screen implements MenuBackdrop.Host
 		if (hasNext() && inside(x, y, rightArrowX(), arrowY(), ARROW_SIZE, ARROW_SIZE)) {
 			NeuItems.clickSound();
 			this.page++;
+			return true;
+		}
+		if (inside(x, y, editX(), editY(), editWidth(), TITLE_HEIGHT)) {
+			NeuItems.clickSound();
+			this.minecraft.gui.setScreen(new WidgetEditScreen(this, this.page));
 			return true;
 		}
 		// Click on a widget opens it over the wheel

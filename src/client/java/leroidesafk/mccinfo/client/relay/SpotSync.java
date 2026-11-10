@@ -417,7 +417,6 @@ public final class SpotSync {
 			com.google.gson.JsonObject auth = new com.google.gson.JsonObject();
 			auth.addProperty("type", "auth");
 			auth.addProperty("name", user.getName());
-			auth.addProperty("badge", ModUsers.showsBadge());
 			sendText(client, auth.toString());
 		}));
 	}
@@ -473,6 +472,7 @@ public final class SpotSync {
 				case "patchnotes" -> PatchNotes.receive(object);
 				case "regions" -> Regions.receive(object);
 				case "fish_list" -> FishCollection.receive(object);
+				case "badge_list" -> leroidesafk.mccinfo.client.badges.Badges.receive(object);
 				case "emojis" -> Emojis.receive(object);
 				case "patchnote_preview" -> PatchNotes.preview(object);
 				case "voice_secret" -> VoiceChat.receiveSecret(object);

@@ -69,9 +69,11 @@ tasks.withType(JavaCompile).configureEach {
 	it.options.release = 25
 }
 
-java {
-	withSourcesJar()
+jar {
+	archiveVersion = "${project.minecraft_version}+${project.version}"
+}
 
+java {
 	sourceCompatibility = JavaVersion.VERSION_25
 	targetCompatibility = JavaVersion.VERSION_25
 }

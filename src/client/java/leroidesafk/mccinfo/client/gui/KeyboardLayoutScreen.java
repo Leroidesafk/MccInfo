@@ -12,6 +12,7 @@ import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.MutableComponent;
 import org.lwjgl.glfw.GLFW;
 
 import java.util.ArrayList;
@@ -95,7 +96,7 @@ public final class KeyboardLayoutScreen extends Screen implements MenuBackdrop.O
 	}
 
 	// What a key does
-	private record Binding(Component name, Component category, boolean mod) {
+	private record Binding(Component name, Component category, boolean mod, String combo, Component comboName, boolean debug) {
 	}
 
 	private record Tab(String label, int x, Runnable select, boolean selected) {
@@ -302,6 +303,8 @@ public final class KeyboardLayoutScreen extends Screen implements MenuBackdrop.O
 	private static Map<InputConstants.Key, List<Binding>> bindings() {
 		Map<InputConstants.Key, List<Binding>> result = new LinkedHashMap<>();
 		Component modCategory = ModKeyCategory.MAIN.label();
+		net.minecraft.client.Options options = Minecraft.getInstance().options;
+		InputConstants.Key debugModifier = options.keyDebugModifier.isUnbound() ? InputConstants.UNKNOWN : InputConstants.getKey(options.keyDebugModifier.saveString());
 		for (KeyMapping mapping : Minecraft.getInstance().options.keyMappings) {
 			if (mapping.isUnbound()) {
 				continue;
@@ -313,17 +316,49 @@ public final class KeyboardLayoutScreen extends Screen implements MenuBackdrop.O
 				continue;
 			}
 			boolean mod = mapping.getCategory() == ModKeyCategory.MAIN;
+			boolean debug = mapping.getCategory() == KeyMapping.Category.DEBUG;
+			boolean f3Combo = debug && mapping != options.keyDebugOverlay && mapping != options.keyDebugModifier && !debugModifier.equals(InputConstants.UNKNOWN);
+			String combo = f3Combo ? "debug+" + debugModifier.getName() + "+" + key.getName() : key.getName();
+			Component comboName = f3Combo ? debugModifier.getDisplayName().copy().append(" + ").append(key.getDisplayName()) : null;
 			result.computeIfAbsent(key, k -> new ArrayList<>())
-					.add(new Binding(Component.translatable(mapping.getName()), mapping.getCategory().label(), mod));
+					.add(new Binding(Component.translatable(mapping.getName()), mapping.getCategory().label(), mod, combo, comboName, debug));
 		}
 		for (PrivateKeys.Key key : PrivateKeys.ALL) {
 			if (!key.usable() || key.key().equals(InputConstants.UNKNOWN)) {
 				continue;
 			}
 			result.computeIfAbsent(key.key(), k -> new ArrayList<>())
-					.add(new Binding(Component.translatable(key.translationKey), modCategory, true));
+					.add(new Binding(Component.translatable(key.translationKey), modCategory, true, key.comboId(), key.modifiers() == 0 ? null : key.displayName(), false));
 		}
 		return result;
+	}
+
+	// Biggest group of actions sharing the exact same combination (debug keys never conflict with each other)
+	private static int conflictSize(List<Binding> bound) {
+		if (bound == null) {
+			return 0;
+		}
+		Map<String, List<Binding>> groups = new HashMap<>();
+		for (Binding binding : bound) {
+			groups.computeIfAbsent(binding.combo(), k -> new ArrayList<>()).add(binding);
+		}
+		int worst = 0;
+		for (List<Binding> group : groups.values()) {
+			if (group.size() > 1 && !group.stream().allMatch(Binding::debug)) {
+				worst = Math.max(worst, group.size());
+			}
+		}
+		return worst;
+	}
+
+	private static long conflictCount(Map<InputConstants.Key, List<Binding>> bindings) {
+		Map<String, List<Binding>> groups = new HashMap<>();
+		for (List<Binding> bound : bindings.values()) {
+			for (Binding binding : bound) {
+				groups.computeIfAbsent(binding.combo(), k -> new ArrayList<>()).add(binding);
+			}
+		}
+		return groups.values().stream().filter(group -> group.size() > 1 && !group.stream().allMatch(Binding::debug)).count();
 	}
 
 	// Free, used, mod or conflict
@@ -331,10 +366,10 @@ public final class KeyboardLayoutScreen extends Screen implements MenuBackdrop.O
 		if (bound == null || bound.isEmpty()) {
 			return COLOR_UNUSED;
 		}
-		if (bound.size() > 1) {
+		if (conflictSize(bound) > 1) {
 			return COLOR_CONFLICT;
 		}
-		return bound.getFirst().mod() ? COLOR_MOD : COLOR_BOUND;
+		return bound.stream().anyMatch(Binding::mod) ? COLOR_MOD : COLOR_BOUND;
 	}
 
 	@Override
@@ -344,8 +379,9 @@ public final class KeyboardLayoutScreen extends Screen implements MenuBackdrop.O
 		drawTabs(graphics, mouseX, mouseY);
 
 		Map<InputConstants.Key, List<Binding>> bindings = bindings();
-		long conflicts = bindings.values().stream().filter(list -> list.size() > 1).count();
-		graphics.centeredText(this.font, Component.translatable("screen.mccinfo.keyboard.summary", conflicts), this.width / 2, this.summaryY, COLOR_HINT);
+		long conflicts = conflictCount(bindings);
+		graphics.centeredText(this.font, Component.translatable("screen.mccinfo.keyboard.summary", conflicts, Minecraft.getInstance().options.keyDebugModifier.getTranslatedKeyMessage()),
+				this.width / 2, this.summaryY, COLOR_HINT);
 
 		drawPlate(graphics, this.board.keyboard(), PLATE_RADIUS, PLATE_RADIUS);
 		int[] mouse = pixels(this.board.mouse());
@@ -440,12 +476,16 @@ public final class KeyboardLayoutScreen extends Screen implements MenuBackdrop.O
 			lines.add(Component.translatable("screen.mccinfo.keyboard.unused").withStyle(ChatFormatting.GRAY));
 			return lines;
 		}
-		if (bound.size() > 1) {
-			lines.add(Component.translatable("screen.mccinfo.keyboard.conflict", bound.size()).withStyle(ChatFormatting.RED));
+		int conflict = conflictSize(bound);
+		if (conflict > 1) {
+			lines.add(Component.translatable("screen.mccinfo.keyboard.conflict", conflict).withStyle(ChatFormatting.RED));
 		}
 		for (Binding binding : bound) {
-			lines.add(Component.literal("• ").append(binding.name()).withStyle(binding.mod() ? ChatFormatting.AQUA : ChatFormatting.GREEN)
-					.append(Component.literal(" · ").append(binding.category()).withStyle(ChatFormatting.DARK_GRAY)));
+			MutableComponent line = Component.literal("• ").append(binding.name()).withStyle(binding.mod() ? ChatFormatting.AQUA : ChatFormatting.GREEN);
+			if (binding.comboName() != null) {
+				line.append(Component.literal(" [").append(binding.comboName()).append("]").withStyle(ChatFormatting.GOLD));
+			}
+			lines.add(line.append(Component.literal(" · ").append(binding.category()).withStyle(ChatFormatting.DARK_GRAY)));
 		}
 		return lines;
 	}

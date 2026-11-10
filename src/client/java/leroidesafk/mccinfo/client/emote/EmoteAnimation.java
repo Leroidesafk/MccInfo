@@ -107,13 +107,15 @@ final class EmoteAnimation {
 	final List<Effect> sounds;
 	final List<Effect> particles;
 	private final Map<String, BoneChannels> bones;
+	private final Molang.Expr preAnimation;
 
-	private EmoteAnimation(double length, Loop loop, Map<String, BoneChannels> bones, List<Effect> sounds, List<Effect> particles) {
+	private EmoteAnimation(double length, Loop loop, Map<String, BoneChannels> bones, List<Effect> sounds, List<Effect> particles, Molang.Expr preAnimation) {
 		this.length = length;
 		this.loop = loop;
 		this.bones = bones;
 		this.sounds = sounds;
 		this.particles = particles;
+		this.preAnimation = preAnimation;
 	}
 
 	// First animation of the file
@@ -160,7 +162,20 @@ final class EmoteAnimation {
 		List<Effect> sounds = effects(animation.get("sound_effects"));
 		List<Effect> particles = effects(animation.get("particle_effects"));
 		double length = animation.has("animation_length") ? animation.get("animation_length").getAsDouble() : last;
-		return new EmoteAnimation(Math.max(length, 0.0), loop, Map.copyOf(bones), sounds, particles);
+		Molang.Expr preAnimation = preAnimation(animation.get("pre_animation"));
+		return new EmoteAnimation(Math.max(length, 0.0), loop, Map.copyOf(bones), sounds, particles, preAnimation);
+	}
+
+	private static Molang.Expr preAnimation(JsonElement element) {
+		if (element == null) return null;
+		List<String> stmts = new ArrayList<>();
+		if (element.isJsonArray()) {
+			element.getAsJsonArray().forEach(e -> { if (e.isJsonPrimitive()) stmts.add(e.getAsString()); });
+		} else if (element.isJsonPrimitive()) {
+			stmts.add(element.getAsString());
+		}
+		if (stmts.isEmpty()) return null;
+		return Molang.parse(String.join(";", stmts), 0.0);
 	}
 
 	// Keyframes or a fixed value
@@ -244,6 +259,7 @@ final class EmoteAnimation {
 	// Bone values at a time
 	void sample(double time, Molang.Scope scope, Map<String, float[]> out) {
 		scope.animTime = time;
+		if (this.preAnimation != null) this.preAnimation.eval(scope);
 		for (Map.Entry<String, BoneChannels> entry : this.bones.entrySet()) {
 			float[] values = out.computeIfAbsent(entry.getKey(), key -> new float[] {0, 0, 0, 0, 0, 0, 1, 1, 1});
 			BoneChannels channels = entry.getValue();

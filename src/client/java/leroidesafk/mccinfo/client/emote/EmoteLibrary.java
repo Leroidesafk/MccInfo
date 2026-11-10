@@ -53,16 +53,21 @@ public final class EmoteLibrary {
 		final Set<EmoteModel.Bone> glowing;
 		final Set<EmoteModel.Bone> billboard;
 		final List<EmoteModel.Bone> trails;
+		// Bones drawn as the player badge
+		final Set<EmoteModel.Bone> icons;
 		final Map<String, Double> variables;
+		final Map<String, Molang.Expr> exprVariables;
 
 		Emote(String id, EmoteModel model, EmoteAnimation intro, EmoteAnimation loop, Identifier texture, Map<String, EmoteParticle> particles,
 				Map<String, byte[]> soundData, List<Identifier> textures, boolean glowAll, Set<String> glowBones, Set<String> billboardBones,
-				List<String> trailBones, Map<String, Double> variables) {
+				List<String> trailBones, Set<String> iconBones, Map<String, Double> variables, Map<String, Molang.Expr> exprVariables) {
 			this.variables = variables;
+			this.exprVariables = exprVariables;
 			Set<String> sounds = soundData.keySet();
 			this.soundData = soundData;
 			this.glowing = matching(model, glowAll, glowBones);
 			this.billboard = matching(model, false, billboardBones);
+			this.icons = model.bones.stream().filter(bone -> iconBones.contains(bone.name)).collect(java.util.stream.Collectors.toUnmodifiableSet());
 			this.trails = trailBones.stream().map(model.byName::get).filter(java.util.Objects::nonNull).toList();
 			this.music = sounds.stream().filter(sound -> sound.equals("music") || sound.endsWith(".music")).sorted().findFirst().orElse(null);
 			this.id = id;
@@ -84,7 +89,7 @@ public final class EmoteLibrary {
 	// Files read, before the textures
 	private record Parsed(EmoteModel model, EmoteAnimation intro, EmoteAnimation loop, String modelTexture, Map<String, JsonObject> particles,
 			Map<String, byte[]> sounds, Map<String, byte[]> images, boolean glowAll, Set<String> glowBones, Set<String> billboardBones,
-			List<String> trailBones, Map<String, Double> variables) {
+			List<String> trailBones, Set<String> iconBones, Map<String, Double> variables, Map<String, Molang.Expr> exprVariables) {
 	}
 
 	// Bones named in emote.json, with their children
@@ -268,7 +273,9 @@ public final class EmoteLibrary {
 		Set<String> glowBones = new HashSet<>();
 		Set<String> billboardBones = new HashSet<>();
 		List<String> trailBones = new ArrayList<>();
+		Set<String> iconBones = new HashSet<>();
 		Map<String, Double> variables = new HashMap<>();
+		Map<String, Molang.Expr> exprVariables = new HashMap<>();
 		for (RemoteFile file : files) {
 			String name = file.name();
 			byte[] bytes = data.get(name);
@@ -299,10 +306,16 @@ public final class EmoteLibrary {
 				}
 				billboardBones.addAll(names(root.get("billboard")));
 				trailBones.addAll(names(root.get("trails")).stream().sorted().toList());
+				iconBones.addAll(names(root.get("player_icon")));
 				if (root.has("variables") && root.get("variables").isJsonObject()) {
 					for (Map.Entry<String, JsonElement> variable : root.getAsJsonObject("variables").entrySet()) {
-						if (variable.getValue().isJsonPrimitive() && variable.getValue().getAsJsonPrimitive().isNumber()) {
-							variables.put(variable.getKey().trim().toLowerCase(Locale.ROOT), variable.getValue().getAsDouble());
+						String key = variable.getKey().trim().toLowerCase(Locale.ROOT);
+						if (variable.getValue().isJsonPrimitive()) {
+							if (variable.getValue().getAsJsonPrimitive().isNumber()) {
+								variables.put(key, variable.getValue().getAsDouble());
+							} else {
+								exprVariables.put(key, Molang.parse(variable.getValue().getAsString(), 0.0));
+							}
 						}
 					}
 				}
@@ -328,20 +341,28 @@ public final class EmoteLibrary {
 				intro = single;
 			}
 		}
-		String modelTexture = null;
-		for (String image : images.keySet().stream().sorted().toList()) {
-			if (!particles.containsKey(image)) {
-				modelTexture = image;
-				break;
+		String modelTexture = images.containsKey(id) ? id : null;
+		if (modelTexture == null) {
+			for (String image : images.keySet().stream().sorted().toList()) {
+				if (!particles.containsKey(image)) {
+					modelTexture = image;
+					break;
+				}
 			}
 		}
 		return new Parsed(model, intro, loop, modelTexture, particles, sounds, images, glowAll, Set.copyOf(glowBones), Set.copyOf(billboardBones),
-				List.copyOf(trailBones), Map.copyOf(variables));
+				List.copyOf(trailBones), Set.copyOf(iconBones), Map.copyOf(variables), Map.copyOf(exprVariables));
 	}
 
 	private static String base(String name) {
 		String withoutExtension = name.substring(0, name.lastIndexOf('.'));
-		return withoutExtension.endsWith(".geo") ? withoutExtension.substring(0, withoutExtension.length() - 4) : withoutExtension;
+		if (withoutExtension.endsWith(".geo")) {
+			return withoutExtension.substring(0, withoutExtension.length() - 4);
+		}
+		if (withoutExtension.endsWith(".particle")) {
+			return withoutExtension.substring(0, withoutExtension.length() - 9);
+		}
+		return withoutExtension;
 	}
 
 	// Textures and particles
@@ -372,7 +393,7 @@ public final class EmoteLibrary {
 		Identifier modelTexture = parsed.modelTexture() == null ? null : textures.get(parsed.modelTexture());
 		LOADED.put(id, new Emote(id, parsed.model(), parsed.intro(), parsed.loop(), modelTexture, Map.copyOf(particles), Map.copyOf(parsed.sounds()),
 				List.copyOf(textures.values()), parsed.glowAll(), parsed.glowBones(), parsed.billboardBones(),
-				parsed.trailBones(), parsed.variables()));
+				parsed.trailBones(), parsed.iconBones(), parsed.variables(), parsed.exprVariables()));
 	}
 
 	private static void unload(String id) {

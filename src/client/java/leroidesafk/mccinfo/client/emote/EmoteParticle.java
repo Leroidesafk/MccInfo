@@ -22,6 +22,15 @@ final class EmoteParticle {
 		DISC
 	}
 
+	// Camera facing or fixed planes
+	enum Facing {
+		CAMERA,
+		Y_AXIS,
+		PLANE_XY,
+		PLANE_XZ,
+		PLANE_YZ
+	}
+
 	private static final int MAX_PARTICLES = 200;
 
 	final Identifier texture;
@@ -50,9 +59,9 @@ final class EmoteParticle {
 	private final Molang.Expr drag;
 	private final Molang.Expr initialRotation;
 	private final Molang.Expr rotationRate;
-	// Look: size, uv, flipbook and tint
+	// Look
 	private final Molang.Expr[] size;
-	final boolean yAxisOnly;
+	final Facing facing;
 	private final float textureWidth;
 	private final float textureHeight;
 	private final Molang.Expr[] uv;
@@ -111,7 +120,12 @@ final class EmoteParticle {
 		JsonObject billboard = object(components, "minecraft:particle_appearance_billboard");
 		this.size = pair(billboard == null ? null : billboard.get("size"), 0.1);
 		String facing = billboard != null && billboard.has("facing_camera_mode") ? billboard.get("facing_camera_mode").getAsString() : "rotate_xyz";
-		this.yAxisOnly = facing.endsWith("_y");
+		this.facing = switch (facing.toLowerCase(Locale.ROOT)) {
+			case "emitter_transform_xy" -> Facing.PLANE_XY;
+			case "emitter_transform_xz" -> Facing.PLANE_XZ;
+			case "emitter_transform_yz" -> Facing.PLANE_YZ;
+			default -> facing.endsWith("_y") ? Facing.Y_AXIS : Facing.CAMERA;
+		};
 		JsonObject uv = billboard == null ? null : object(billboard, "uv");
 		this.textureWidth = uv != null && uv.has("texture_width") ? uv.get("texture_width").getAsFloat() : 1.0F;
 		this.textureHeight = uv != null && uv.has("texture_height") ? uv.get("texture_height").getAsFloat() : 1.0F;

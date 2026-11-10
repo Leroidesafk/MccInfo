@@ -7,6 +7,7 @@ import leroidesafk.mccinfo.Mccinfo;
 import leroidesafk.mccinfo.client.mixin.accessor.BossHealthOverlayAccessor;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.item.v1.ItemTooltipCallback;
+import net.fabricmc.fabric.api.client.message.v1.ClientReceiveMessageEvents;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.LerpingBossEvent;
@@ -21,42 +22,48 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.component.ItemLore;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-// Island with the best chance of a new fish, read from the player's perks and supplies
+// Island with the best chance of a fish not caught yet
 public final class BestIsland {
 	// Fishing Perks menu
 	private static final String PERKS_TITLE = "fishing perks";
 	private static final int TITLE_SLOT = 8;
 	private static final Pattern PERK_PATTERN = Pattern.compile("^(.+?)\\s*\\((\\d+)\\s*/\\s*\\d+\\)$");
 
-	// Supplies menu
+	// Overclocks, in the Supply Preserve menu
 	private static final String OVERCLOCKS_TITLE = "supply preserve perk";
 	private static final int OVERCLOCKS_SLOT = 1;
 	private static final String OVERCLOCKED_PERK_HEADER = "overclocked perk";
 	private static final Pattern SELECTED_PERK_PATTERN = Pattern.compile(">\\s*(.+)$");
-	private static final String HOOK_OVERCLOCK = "hook overclock";
-	private static final String ROD_OVERCLOCK = "rod overclock";
-	private static final String UNSTABLE_OVERCLOCK = "unstable overclock";
+	static final String HOOK_OVERCLOCK = "hook overclock";
+	static final String MAGNET_OVERCLOCK = "magnet overclock";
+	static final String ROD_OVERCLOCK = "rod overclock";
+	static final String UNSTABLE_OVERCLOCK = "unstable overclock";
+	static final List<String> OVERCLOCKS = List.of(HOOK_OVERCLOCK, MAGNET_OVERCLOCK, ROD_OVERCLOCK, UNSTABLE_OVERCLOCK);
 
+	// Supplies menu
 	private static final int BAIT_SLOT = 19;
 	private static final int LINE_SLOT = 37;
 	private static final int[] AUGMENT_SLOTS = {30, 31, 32, 33, 34, 39, 40, 41, 42, 43};
-	private static final String EMPTY_SLOT_MARKER = "supply slot";
+	private static final String EMPTY_SLOT_SUFFIX = " slot";
 	private static final Pattern BONUS_PATTERN = Pattern.compile("\\+\\s*(\\d+)[^a-z]*([a-z]+(?: [a-z]+)*)");
-	private static final String ELUSIVE_LURE = "elusive lure";
-	private static final String ELUSIVE_SODA = "elusive soda";
+	private static final Pattern GUARANTEE_PATTERN = Pattern.compile("^(\\d+)%\\s+([a-z]+(?: [a-z]+)* chance)$");
+	private static final Pattern BAIT_REMAINING_PATTERN = Pattern.compile("bait remaining:\\s*([\\d,]+)");
+	private static final Pattern USES_PATTERN = Pattern.compile("uses remaining:\\s*([\\d,]+)\\s*/\\s*([\\d,]+)");
 	private static final String RARITY_ROD = "rarity rod";
-	private static final Set<String> NO_FISH_LURES = Set.of("spirit lure", "treasure lure", "pearl lure");
+	private static final String ELUSIVE_FISH_CHANCE = "elusive fish chance";
+	private static final List<String> NO_FISH_CHANCES = List.of("pearl chance", "spirit chance", "treasure chance");
+	private static final int GUARANTEED = 100;
 
 	private static final String STRONG_HOOK = "strong hook";
 	private static final String WISE_HOOK = "wise hook";
@@ -72,6 +79,7 @@ public final class BestIsland {
 	private static final Pattern TIME_PATTERN = Pattern.compile("(?<!\\d)(\\d{1,2}):(\\d{2})(?!\\d)");
 	private static final int DAY_START = 8 * 60 + 30;
 	private static final int DAY_END = 20 * 60 + 30;
+	private static final int TIME_TICKS = 20;
 
 	private static final Set<String> GROTTO_ISLANDS = Set.of("sunken swamp", "mirrored oasis", "volcanic springs");
 
@@ -81,7 +89,6 @@ public final class BestIsland {
 	private static final double HOOK_MULTIPLIER_PER_POINT = 0.1;
 	private static final double ROD_MULTIPLIER_PER_POINT = 0.01;
 	private static final double ELUSIVE_CHANCE_PER_POINT = 0.005;
-	private static final double ELUSIVE_SODA_CHANCE = 0.1;
 	private static final double RARITY_ROD_MULTIPLIER = 3.0;
 	private static final double LARGE_BASE = 0.075;
 	private static final double MASSIVE_BASE = 0.02;
@@ -92,22 +99,35 @@ public final class BestIsland {
 	private static final double LEGENDARY_BASE = 0.01;
 	private static final double MYTHIC_BASE = 0.002;
 
+	// Catch and supply messages
+	private static final Pattern CAUGHT_PATTERN = Pattern.compile("You caught: \\[([^\\[\\]]+)]");
+	private static final String TICKET = "ticket";
+	private static final String RUN_OUT = "run out of your equipped";
+	private static final String SUPPLY_PRESERVE = "supply preserve";
+	private static final long PRESERVE_MILLIS = 1_500L;
+
+	// Best island icon
 	private static final Identifier BEST_ICON = Mccinfo.id("textures/gui/best.png");
 	private static final int ICON_SIZE = 8;
 	private static final int ICON_TEXTURE = 16;
 	private static final int CHANCE_LABEL_COLOR = 0xFFFF55;
 	private static final int CHANCE_VALUE_COLOR = 0xFFFFFF;
 
-	private static final String CRAB_MARKER = "crab";
 	private static final int SLOT_SIZE = 16;
 
 	private static final ContainerWatch WATCH = new ContainerWatch();
 
 	private static boolean night;
+	private static int timeTicks;
 	private static Container openIslands;
 	private static Set<String> bestIslands = Set.of();
 	private static Map<String, Double> dayChances = Map.of();
 	private static Map<String, Double> nightChances = Map.of();
+
+	private static long lastCatch;
+	private static boolean usedBait;
+	private static boolean usedLine;
+	private static long preservedAt;
 
 	private BestIsland() {
 	}
@@ -115,9 +135,34 @@ public final class BestIsland {
 	public static void register() {
 		ClientTickEvents.END_CLIENT_TICK.register(BestIsland::tick);
 		ItemTooltipCallback.EVENT.register((stack, context, flag, lines) -> addChances(stack, lines));
+		ClientReceiveMessageEvents.GAME.register((message, overlay) -> {
+			if (!overlay) {
+				onChatMessage(message.getString());
+			}
+		});
+		ClientReceiveMessageEvents.GAME_CANCELED.register((message, overlay) -> {
+			if (!overlay) {
+				onChatMessage(message.getString());
+			}
+		});
 	}
 
+	static boolean night() {
+		return night;
+	}
+
+	// Open fishing menu, read once per change
 	private static void tick(Minecraft client) {
+		if (!FishCollection.allowed()) {
+			openIslands = null;
+			bestIslands = Set.of();
+			WATCH.reset();
+			return;
+		}
+		if (++timeTicks >= TIME_TICKS) {
+			timeTicks = 0;
+			readBossBars(client);
+		}
 		if (!(client.gui.screen() instanceof ContainerScreen screen)) {
 			openIslands = null;
 			bestIslands = Set.of();
@@ -135,7 +180,6 @@ public final class BestIsland {
 			}
 			return;
 		}
-		// Which menu is open
 		openIslands = null;
 		bestIslands = Set.of();
 		String title = screen.getTitle().getString().toLowerCase(Locale.ROOT);
@@ -146,7 +190,7 @@ public final class BestIsland {
 			readEquipment(container);
 		} else if (container.getContainerSize() > LEVEL_SLOT && LEVEL_PATTERN.matcher(name(container.getItem(LEVEL_SLOT))).matches()) {
 			readBossBars(client);
-			readIslandIcons(container);
+			readLockedIslands(container);
 			openIslands = container;
 			dayChances = chances(FishCollection.Time.DAY);
 			nightChances = chances(FishCollection.Time.NIGHT);
@@ -154,30 +198,28 @@ public final class BestIsland {
 		}
 	}
 
-	// Island and crab icons for the Fish Collection
-	private static void readIslandIcons(Container container) {
-		boolean changed = false;
+	// Locked islands, saved in the config
+	private static void readLockedIslands(Container container) {
+		Set<String> locked = new HashSet<>();
+		boolean found = false;
 		for (int slot = 0; slot < container.getContainerSize(); slot++) {
 			ItemStack stack = container.getItem(slot);
-			if (stack.isEmpty()) {
-				continue;
-			}
-			String name = name(stack);
-			if (FishCollection.islands().contains(name)) {
-				changed |= ItemIcons.remember(name, stack);
-				continue;
-			}
-			for (String climate : FishCollection.crabClimates()) {
-				if (name.startsWith(climate) && name.contains(CRAB_MARKER)) {
-					changed |= ItemIcons.remember(crabIconKey(climate), stack);
+			String name = stack.isEmpty() ? null : name(stack);
+			if (name != null && FishCollection.islands().contains(name)) {
+				found = true;
+				if (isLocked(stack)) {
+					locked.add(name);
 				}
 			}
 		}
-		if (changed) {
-			ItemIcons.save();
+		ModConfig config = ModConfig.get();
+		if (found && !locked.equals(config.lockedIslands)) {
+			config.lockedIslands = locked;
+			config.save();
 		}
 	}
 
+	// Icon key of a crab section
 	static String crabIconKey(String climate) {
 		return climate.toLowerCase(Locale.ROOT) + " crabs";
 	}
@@ -211,34 +253,58 @@ public final class BestIsland {
 		}
 	}
 
-	// Bait, line and augments with their bonuses
+	// Bait, line and augments with their bonuses and uses
 	private static void readEquipment(Container container) {
 		Map<String, Integer> bonuses = new HashMap<>();
+		Map<String, Integer> baitBonuses = new HashMap<>();
+		Map<String, Integer> lineBonuses = new HashMap<>();
 		List<String> augments = new ArrayList<>();
-		addBonuses(container, BAIT_SLOT, bonuses);
-		addBonuses(container, LINE_SLOT, bonuses);
+		List<String> augmentUses = new ArrayList<>();
 		boolean iconsChanged = false;
+		List<Map<String, Integer>> augmentBonuses = new ArrayList<>();
 		for (int slot : AUGMENT_SLOTS) {
-			addBonuses(container, slot, bonuses);
 			String augment = equipped(container, slot);
 			if (augment != null) {
+				ItemStack stack = container.getItem(slot);
+				Map<String, Integer> own = new HashMap<>();
+				addBonuses(stack, own);
+				own.forEach((perk, value) -> bonuses.merge(perk, value, Integer::sum));
+				augmentBonuses.add(own);
 				augments.add(augment);
-				iconsChanged |= ItemIcons.remember(augment, container.getItem(slot));
+				int[] uses = uses(stack);
+				augmentUses.add(uses == null ? "" : uses[0] + "/" + uses[1]);
+				iconsChanged |= ItemIcons.remember(augment, stack);
 			}
 		}
 		String bait = equipped(container, BAIT_SLOT);
 		String line = equipped(container, LINE_SLOT);
-		iconsChanged |= bait != null && ItemIcons.remember(bait, container.getItem(BAIT_SLOT));
-		iconsChanged |= line != null && ItemIcons.remember(line, container.getItem(LINE_SLOT));
-		ModConfig config = ModConfig.get();
-		if (!bonuses.equals(config.equipmentBonuses) || !augments.equals(config.augments)
-				|| !Objects.equals(bait, config.bait) || !Objects.equals(line, config.line)) {
-			config.equipmentBonuses = bonuses;
-			config.augments = augments;
-			config.bait = bait;
-			config.line = line;
-			config.save();
+		Integer baitUses = null;
+		int[] lineUses = null;
+		if (bait != null) {
+			ItemStack stack = container.getItem(BAIT_SLOT);
+			addBonuses(stack, baitBonuses);
+			baitUses = baitRemaining(stack);
+			iconsChanged |= ItemIcons.remember(bait, stack);
 		}
+		if (line != null) {
+			ItemStack stack = container.getItem(LINE_SLOT);
+			addBonuses(stack, lineBonuses);
+			lineUses = uses(stack);
+			iconsChanged |= ItemIcons.remember(line, stack);
+		}
+		ModConfig config = ModConfig.get();
+		config.equipmentBonuses = bonuses;
+		config.augments = augments;
+		config.augmentUses = augmentUses;
+		config.augmentBonuses = augmentBonuses;
+		config.bait = bait;
+		config.baitUses = baitUses;
+		config.baitBonuses = baitBonuses;
+		config.line = line;
+		config.lineUses = lineUses == null ? null : lineUses[0];
+		config.lineMaxUses = lineUses == null ? null : lineUses[1];
+		config.lineBonuses = lineBonuses;
+		config.save();
 		if (iconsChanged) {
 			ItemIcons.save();
 		}
@@ -249,24 +315,74 @@ public final class BestIsland {
 			return null;
 		}
 		String name = name(container.getItem(slot));
-		return name.contains(EMPTY_SLOT_MARKER) ? null : name;
+		return name.endsWith(EMPTY_SLOT_SUFFIX) ? null : name;
 	}
 
-	private static void addBonuses(Container container, int slot, Map<String, Integer> bonuses) {
-		ItemLore lore = slot < container.getContainerSize() ? container.getItem(slot).get(DataComponents.LORE) : null;
-		if (lore == null) {
-			return;
+	private static List<String> loreLines(ItemStack stack) {
+		ItemLore lore = stack.get(DataComponents.LORE);
+		List<String> lines = new ArrayList<>();
+		if (lore != null) {
+			for (Component line : lore.lines()) {
+				lines.add(line.getString().trim().toLowerCase(Locale.ROOT));
+			}
 		}
-		for (Component line : lore.lines()) {
-			Matcher matcher = BONUS_PATTERN.matcher(line.getString().trim().toLowerCase(Locale.ROOT));
+		return lines;
+	}
+
+	private static void addBonuses(ItemStack stack, Map<String, Integer> bonuses) {
+		for (String line : loreLines(stack)) {
+			Matcher matcher = BONUS_PATTERN.matcher(line);
 			if (matcher.find()) {
 				bonuses.merge(matcher.group(2), Integer.parseInt(matcher.group(1)), Integer::sum);
+				continue;
+			}
+			Matcher guarantee = GUARANTEE_PATTERN.matcher(line);
+			if (guarantee.find()) {
+				bonuses.merge(guarantee.group(2), Integer.parseInt(guarantee.group(1)), Integer::sum);
 			}
 		}
 	}
 
+	private static Integer baitRemaining(ItemStack stack) {
+		for (String line : loreLines(stack)) {
+			Matcher matcher = BAIT_REMAINING_PATTERN.matcher(line);
+			if (matcher.find()) {
+				return Integer.parseInt(matcher.group(1).replace(",", ""));
+			}
+		}
+		return null;
+	}
+
+	private static int[] uses(ItemStack stack) {
+		for (String line : loreLines(stack)) {
+			Matcher matcher = USES_PATTERN.matcher(line);
+			if (matcher.find()) {
+				return new int[] {Integer.parseInt(matcher.group(1).replace(",", "")), Integer.parseInt(matcher.group(2).replace(",", ""))};
+			}
+		}
+		return null;
+	}
+
+	static boolean baitActive() {
+		ModConfig config = ModConfig.get();
+		return config.bait != null && (config.baitUses == null || config.baitUses > 0);
+	}
+
+	static boolean lineActive() {
+		ModConfig config = ModConfig.get();
+		return config.line != null && (config.lineUses == null || config.lineUses > 0);
+	}
+
 	static int equipment(String perk) {
-		return ModConfig.get().equipmentBonuses.getOrDefault(perk, 0);
+		ModConfig config = ModConfig.get();
+		int bonus = config.equipmentBonuses.getOrDefault(perk, 0);
+		if (baitActive()) {
+			bonus += config.baitBonuses.getOrDefault(perk, 0);
+		}
+		if (lineActive()) {
+			bonus += config.lineBonuses.getOrDefault(perk, 0);
+		}
+		return bonus;
 	}
 
 	static int overclockBonus(String perk) {
@@ -278,6 +394,10 @@ public final class BestIsland {
 			}
 		}
 		return bonus;
+	}
+
+	static int total(String perk) {
+		return perk(perk) + overclockBonus(perk) + equipment(perk);
 	}
 
 	private static int augments(String name) {
@@ -363,7 +483,8 @@ public final class BestIsland {
 	}
 
 	private static double elusiveChance() {
-		if (augments(ELUSIVE_LURE) > 0) {
+		int augmentChance = equipment(ELUSIVE_FISH_CHANCE);
+		if (augmentChance >= GUARANTEED) {
 			return 1.0;
 		}
 		int elusivePerk = 0;
@@ -372,7 +493,7 @@ public final class BestIsland {
 				elusivePerk = perk.getValue();
 			}
 		}
-		return Math.min(1.0, (elusivePerk * ELUSIVE_CHANCE_PER_POINT + augments(ELUSIVE_SODA) * ELUSIVE_SODA_CHANCE)
+		return Math.min(1.0, (elusivePerk * ELUSIVE_CHANCE_PER_POINT + augmentChance / 100.0)
 				* (1 + strongRodPoints() * ROD_MULTIPLIER_PER_POINT));
 	}
 
@@ -380,41 +501,18 @@ public final class BestIsland {
 		return 1 + hookPoints(hook) * HOOK_MULTIPLIER_PER_POINT;
 	}
 
-	// Shown by the Fish Collection debug
-	static List<String> debugLines() {
-		ModConfig config = ModConfig.get();
-		return List.of(
-				String.format(Locale.ROOT, "Strong Hook: %d + %d overclock + %d equip = %d pts (x%.2f)", perk(STRONG_HOOK),
-						overclock(HOOK_OVERCLOCK, Set.of(STRONG_HOOK)), equipment(STRONG_HOOK), hookPoints(STRONG_HOOK), hookMultiplier(STRONG_HOOK)),
-				String.format(Locale.ROOT, "Wise Hook: %d + %d overclock + %d equip = %d pts (x%.2f)", perk(WISE_HOOK),
-						overclock(HOOK_OVERCLOCK, Set.of(WISE_HOOK)), equipment(WISE_HOOK), hookPoints(WISE_HOOK), hookMultiplier(WISE_HOOK)),
-				String.format(Locale.ROOT, "Strong Rod: %d pts | Elusive: %.2f%% | %s", strongRodPoints(),
-						elusiveChance() * 100, night ? "Night" : "Day"),
-				"Overclocks: " + config.overclocks,
-				"Equipment: " + config.equipmentBonuses,
-				"Augments: " + config.augments);
-	}
-
-	// Chance per catch of a fish not caught yet, per island
-	private static Map<String, Double> chances(FishCollection.Time now) {
+	private static Map<FishCollection.Weight, Double> weightChances() {
 		double weightMultiplier = hookMultiplier(STRONG_HOOK);
-		double rarityMultiplier = hookMultiplier(WISE_HOOK);
-		double elusiveChance = elusiveChance();
-		double fishPerCatch = FISH_PER_CATCH;
-		for (String lure : NO_FISH_LURES) {
-			if (augments(lure) > 0) {
-				fishPerCatch = 0.0;
-			}
-		}
-		double regularPerCatch = (1 - elusiveChance) * fishPerCatch;
-		double elusivePerCatch = elusiveChance * fishPerCatch;
-
 		Map<FishCollection.Weight, Double> weights = new EnumMap<>(FishCollection.Weight.class);
 		weights.put(FishCollection.Weight.LARGE, weightMultiplier * LARGE_BASE);
 		weights.put(FishCollection.Weight.MASSIVE, weightMultiplier * MASSIVE_BASE);
 		weights.put(FishCollection.Weight.GARGANTUAN, weightMultiplier * GARGANTUAN_BASE);
 		weights.put(FishCollection.Weight.AVERAGE, 1 - weightMultiplier * (LARGE_BASE + MASSIVE_BASE + GARGANTUAN_BASE));
+		return weights;
+	}
 
+	private static Map<FishCollection.Rarity, Double> rarityChances() {
+		double rarityMultiplier = hookMultiplier(WISE_HOOK);
 		Map<FishCollection.Rarity, Double> rarities = new EnumMap<>(FishCollection.Rarity.class);
 		boolean rarityRod = augments(RARITY_ROD) > 0;
 		double epic = rarityMultiplier * EPIC_BASE;
@@ -427,6 +525,22 @@ public final class BestIsland {
 		rarities.put(FishCollection.Rarity.LEGENDARY, legendary);
 		rarities.put(FishCollection.Rarity.MYTHIC, mythic);
 		rarities.put(FishCollection.Rarity.COMMON, rarityRod ? 0.0 : 1 - uncommon - RARE_BASE - epic - legendary - mythic);
+		return rarities;
+	}
+
+	// Chance per catch of a fish not caught yet, per island
+	static Map<String, Double> chances(FishCollection.Time now) {
+		double elusiveChance = elusiveChance();
+		double fishPerCatch = FISH_PER_CATCH;
+		for (String chance : NO_FISH_CHANCES) {
+			if (equipment(chance) >= GUARANTEED) {
+				fishPerCatch = 0.0;
+			}
+		}
+		double regularPerCatch = (1 - elusiveChance) * fishPerCatch;
+		double elusivePerCatch = elusiveChance * fishPerCatch;
+		Map<FishCollection.Weight, Double> weights = weightChances();
+		Map<FishCollection.Rarity, Double> rarities = rarityChances();
 
 		Map<String, Double> chances = new HashMap<>();
 		for (FishCollection.Fish fish : FishCollection.fish()) {
@@ -451,17 +565,65 @@ public final class BestIsland {
 		return chances;
 	}
 
-	// Best normal island and best Grotto, locked islands skipped
+	static Map<String, Double> elusiveChances() {
+		Map<FishCollection.Weight, Double> weights = weightChances();
+		Map<FishCollection.Rarity, Double> rarities = rarityChances();
+		Map<String, Double> chances = new HashMap<>();
+		for (FishCollection.Fish fish : FishCollection.fish()) {
+			if (fish.crab() || fish.time() != FishCollection.Time.ELUSIVE) {
+				continue;
+			}
+			double perCatch = rarities.get(fish.rarity());
+			for (FishCollection.Weight weight : fish.weights()) {
+				if (!FishCollection.isCaught(fish, weight)) {
+					chances.merge(fish.island().toLowerCase(Locale.ROOT), perCatch * weights.get(weight), Double::sum);
+				}
+			}
+		}
+		return chances;
+	}
+
+	// Best islands, locked ones skipped
+	static Set<String> bestElusiveIslands() {
+		List<String> open = new ArrayList<>();
+		for (String island : FishCollection.islands()) {
+			if (!ModConfig.get().lockedIslands.contains(island)) {
+				open.add(island);
+			}
+		}
+		return pick(open, elusiveChances());
+	}
+
 	private static Set<String> bestIslands(Container container, Map<String, Double> chances) {
+		List<String> open = new ArrayList<>();
+		for (int slot = 0; slot < container.getContainerSize(); slot++) {
+			ItemStack stack = container.getItem(slot);
+			if (!stack.isEmpty() && !isLocked(stack)) {
+				open.add(name(stack));
+			}
+		}
+		return pick(open, chances);
+	}
+
+	static Set<String> bestIslands(FishCollection.Time time) {
+		List<String> open = new ArrayList<>();
+		for (String island : FishCollection.islands()) {
+			if (!ModConfig.get().lockedIslands.contains(island)) {
+				open.add(island);
+			}
+		}
+		return pick(open, chances(time));
+	}
+
+	// Best normal island and best Grotto
+	private static Set<String> pick(Collection<String> islands, Map<String, Double> chances) {
 		String best = null;
 		double bestChance = 0.0;
 		String bestGrotto = null;
 		double bestGrottoChance = 0.0;
-		for (int slot = 0; slot < container.getContainerSize(); slot++) {
-			ItemStack stack = container.getItem(slot);
-			String island = stack.isEmpty() || isLocked(stack) ? null : name(stack);
-			double chance = island == null ? 0.0 : chances.getOrDefault(island, 0.0);
-			if (island != null && GROTTO_ISLANDS.contains(island)) {
+		for (String island : islands) {
+			double chance = chances.getOrDefault(island, 0.0);
+			if (GROTTO_ISLANDS.contains(island)) {
 				if (chance > bestGrottoChance) {
 					bestGrotto = island;
 					bestGrottoChance = chance;
@@ -481,8 +643,80 @@ public final class BestIsland {
 		return found;
 	}
 
+	// Bait and line uses: -1 per catch, given back by Supply Preserve
+	private static void onChatMessage(String message) {
+		if (!FishCollection.allowed()) {
+			return;
+		}
+		long now = System.currentTimeMillis();
+		Matcher caught = CAUGHT_PATTERN.matcher(message);
+		if (caught.find()) {
+			if (caught.group(1).toLowerCase(Locale.ROOT).contains(TICKET)) {
+				return;
+			}
+			if (now - preservedAt <= PRESERVE_MILLIS) {
+				preservedAt = 0;
+				return;
+			}
+			useSupplies(now);
+			return;
+		}
+		String lower = message.toLowerCase(Locale.ROOT);
+		if (lower.contains(SUPPLY_PRESERVE) && (lower.contains("triggered:") || lower.contains("special:"))) {
+			if (now - lastCatch <= PRESERVE_MILLIS) {
+				restoreSupplies();
+			} else {
+				preservedAt = now;
+			}
+			return;
+		}
+		if (lower.contains(RUN_OUT)) {
+			ModConfig config = ModConfig.get();
+			if (lower.contains("bait") && config.bait != null) {
+				config.baitUses = 0;
+				config.save();
+			} else if (lower.contains("line") && config.line != null) {
+				config.lineUses = 0;
+				config.save();
+			}
+		}
+	}
+
+	private static void useSupplies(long now) {
+		ModConfig config = ModConfig.get();
+		usedBait = config.bait != null && config.baitUses != null && config.baitUses > 0;
+		usedLine = config.line != null && config.lineUses != null && config.lineUses > 0;
+		if (usedBait) {
+			config.baitUses--;
+		}
+		if (usedLine) {
+			config.lineUses--;
+		}
+		lastCatch = now;
+		if (usedBait || usedLine) {
+			config.save();
+		}
+	}
+
+	private static void restoreSupplies() {
+		ModConfig config = ModConfig.get();
+		if (usedBait && config.baitUses != null) {
+			config.baitUses++;
+		}
+		if (usedLine && config.lineUses != null) {
+			config.lineUses++;
+		}
+		usedBait = false;
+		usedLine = false;
+		lastCatch = 0;
+		config.save();
+	}
+
 	// Day and Night chances in the island tooltip
 	private static void addChances(ItemStack stack, List<Component> lines) {
+		if (!FishCollection.allowed()) {
+			return;
+		}
 		if (openIslands == null || lines.isEmpty() || isLocked(stack)) {
 			return;
 		}
@@ -510,6 +744,9 @@ public final class BestIsland {
 
 	// Icon in the corner of the best slots
 	public static void extractBestIcon(GuiGraphicsExtractor graphics, Slot slot) {
+		if (!FishCollection.allowed() || !ModConfig.get().bestIslandIcon) {
+			return;
+		}
 		if (bestIslands.isEmpty() || slot.container != openIslands || !bestIslands.contains(name(slot.getItem()))) {
 			return;
 		}

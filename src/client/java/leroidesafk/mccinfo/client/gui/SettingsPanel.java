@@ -64,6 +64,8 @@ public final class SettingsPanel {
 	private static final int CHIP_HEIGHT = 14;
 	private static final int CHIP_GAP = 4;
 	private static final int CHIP_PADDING = 5;
+	private static final int CHIP_ICON = 12;
+	private static final int CHIP_ICON_GAP = 3;
 	private static final int CHOICE_HEIGHT = 14;
 	private static final int CHOICE_PADDING = 6;
 	private static final float BELOW_RATIO = 0.45F;
@@ -187,7 +189,11 @@ public final class SettingsPanel {
 	}
 
 	// Controls of a card
-	sealed interface Control permits Toggle, Action, Dropdown, Input, IconButton, Slider, Meter, Break {
+	sealed interface Control permits Toggle, Action, Dropdown, Input, IconButton, Slider, Meter, Break, PageLink {
+	}
+
+	// Link to another page and section
+	record PageLink(int icon, String page, String section, Supplier<Component> tooltip) implements Control {
 	}
 
 	record Input(EditBox box) implements Control {
@@ -226,7 +232,10 @@ public final class SettingsPanel {
 	}
 
 	// Removable pill under the text
-	record Chip(Component label, Runnable remove) {
+	record Chip(Component label, Runnable remove, net.minecraft.world.item.ItemStack icon, boolean removable) {
+		Chip(Component label, Runnable remove) {
+			this(label, remove, null, true);
+		}
 	}
 
 	// Link of the left column
@@ -470,7 +479,10 @@ public final class SettingsPanel {
 	private void extractSidebar(GuiGraphicsExtractor graphics, List<List<Page>> groups, int mouseX, int mouseY) {
 		int x = this.left + BORDER + SIDEBAR_PADDING;
 		int width = this.sidebarRight - x;
-		graphics.text(this.font, Component.translatable("screen.mccinfo.events.title"), x, this.top + BORDER + (TOP_BAR - this.font.lineHeight) / 2 + 1, COLOR_WHITE, true);
+		int titleY = this.top + BORDER + (TOP_BAR - this.font.lineHeight) / 2 + 1;
+		int iconWidth = leroidesafk.mccinfo.client.relay.ModUsers.extractUserIcon(graphics, x, titleY);
+		int titleX = iconWidth > 0 ? x + iconWidth + this.font.width(" ") : x;
+		graphics.text(this.font, Component.translatable("screen.mccinfo.events.title"), titleX, titleY, COLOR_WHITE, true);
 		int y = this.viewportTop + SIDEBAR_GAP;
 		for (List<Page> group : groups) {
 			for (Page page : group) {
@@ -878,6 +890,7 @@ public final class SettingsPanel {
 			case Slider slider -> SLIDER_WIDTH;
 			case Meter meter -> SLIDER_WIDTH;
 			case Break lineBreak -> 0;
+			case PageLink link -> CONTROL_HEIGHT;
 		};
 	}
 
@@ -925,7 +938,9 @@ public final class SettingsPanel {
 	}
 
 	private int chipWidth(Chip chip) {
-		return CHIP_PADDING * 3 + this.font.width(chip.label()) + CROSS_GLYPH.length;
+		int icon = chip.icon() == null ? 0 : CHIP_ICON + CHIP_ICON_GAP;
+		int cross = chip.removable() ? CHIP_PADDING + CROSS_GLYPH.length : 0;
+		return CHIP_PADDING * 2 + icon + this.font.width(chip.label()) + cross;
 	}
 
 	private Layout layout(Card card, int width) {
@@ -1079,7 +1094,7 @@ public final class SettingsPanel {
 		graphics.fill(x + 1, y + 1, x + width - 1, y + height - 1, mix(COLOR_CONTROL, COLOR_CONTROL_HOVER, fade));
 	}
 
-	// Toggle, button, field, dropdown, icon button, slider or meter
+	// Toggle, button, field, dropdown, icon button, slider, meter or page link
 	private void extractControl(GuiGraphicsExtractor graphics, String key, Control control, int x, int y, int width, int mouseX, int mouseY) {
 		boolean hovered = hovered(x, y, width, controlHeight(control), mouseX, mouseY);
 		float fade = fade(key, hovered);
@@ -1152,6 +1167,19 @@ public final class SettingsPanel {
 				hovered = false;
 			}
 			case Break lineBreak -> hovered = false;
+			case PageLink link -> {
+				extractBox(graphics, x, y, width, CONTROL_HEIGHT, fade);
+				icon(graphics, link.icon(), x + (width - ICON) / 2, y + (CONTROL_HEIGHT - ICON) / 2, mix(COLOR_TEXT, COLOR_WHITE, fade));
+				if (hovered) {
+					this.tooltip = link.tooltip().get();
+					this.tooltipX = mouseX;
+					this.tooltipY = mouseY;
+				}
+				addHit(x, y, width, CONTROL_HEIGHT, () -> {
+					select(link.page());
+					this.jumpSection = link.section();
+				});
+			}
 			case Slider slider -> {
 				boolean active = slider.active().getAsBoolean();
 				boolean dragged = this.draggedSlider != null && this.draggedSlider.slider() == slider;
@@ -1225,12 +1253,27 @@ public final class SettingsPanel {
 	}
 
 	private void extractChip(GuiGraphicsExtractor graphics, String key, Chip chip, int x, int y, int width, int mouseX, int mouseY) {
-		boolean hovered = hovered(x, y, width, CHIP_HEIGHT, mouseX, mouseY);
+		boolean clickable = chip.remove() != null;
+		boolean hovered = clickable && hovered(x, y, width, CHIP_HEIGHT, mouseX, mouseY);
 		float fade = fade(key, hovered);
 		extractBox(graphics, x, y, width, CHIP_HEIGHT, fade);
 		int color = mix(COLOR_TEXT, COLOR_WHITE, fade);
-		graphics.text(this.font, chip.label(), x + CHIP_PADDING, y + (CHIP_HEIGHT - this.font.lineHeight) / 2 + 1, color, true);
-		pixels(graphics, CROSS_GLYPH, x + width - CHIP_PADDING - CROSS_GLYPH.length, y + (CHIP_HEIGHT - CROSS_GLYPH.length) / 2, color);
+		int textX = x + CHIP_PADDING;
+		if (chip.icon() != null) {
+			graphics.pose().pushMatrix();
+			graphics.pose().translate(textX, y + (CHIP_HEIGHT - CHIP_ICON) / 2.0F);
+			graphics.pose().scale(CHIP_ICON / 16.0F, CHIP_ICON / 16.0F);
+			graphics.fakeItem(chip.icon(), 0, 0);
+			graphics.pose().popMatrix();
+			textX += CHIP_ICON + CHIP_ICON_GAP;
+		}
+		graphics.text(this.font, chip.label(), textX, y + (CHIP_HEIGHT - this.font.lineHeight) / 2 + 1, color, true);
+		if (chip.removable()) {
+			pixels(graphics, CROSS_GLYPH, x + width - CHIP_PADDING - CROSS_GLYPH.length, y + (CHIP_HEIGHT - CROSS_GLYPH.length) / 2, color);
+		}
+		if (!clickable) {
+			return;
+		}
 		addHit(x, y, width, CHIP_HEIGHT, () -> {
 			NeuItems.clickSound();
 			chip.remove().run();

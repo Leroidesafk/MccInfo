@@ -26,12 +26,12 @@ import java.util.Map;
 public final class ModUsers {
 	// Tab row and hidden badge color
 	private static final int ROW_HEIGHT = 8;
-	private static int hiddenColor;
+	private static int hiddenColor = 0xFFFF4040;
 
 	public record Badge(String badge, boolean hidden) {
 	}
 
-	private record Icon(Identifier texture, int width, int height) {
+	public record Icon(Identifier texture, int width, int height) {
 	}
 
 	// Lowercase name of each mod user, icon of each badge
@@ -93,20 +93,9 @@ public final class ModUsers {
 		icons = Map.copyOf(loaded);
 	}
 
-	// Badge settings
-	public static boolean showsBadge() {
-		return ModConfig.get().showModBadge;
-	}
-
+	// Badge of a tab player
 	public static boolean seesBadges() {
-		return showsBadge() && ModConfig.get().seeModBadges;
-	}
-
-	public static void sendPrefs() {
-		JsonObject message = new JsonObject();
-		message.addProperty("type", "badge_prefs");
-		message.addProperty("show", showsBadge());
-		SpotSync.sendVoice(message);
+		return ModConfig.get().seeModBadges;
 	}
 
 	public static Badge badge(PlayerInfo info) {
@@ -125,8 +114,39 @@ public final class ModUsers {
 		return found != null && shown(found) ? found : null;
 	}
 
+	// Badge icon of a player, user by default
+	public static Icon playerIcon(String name) {
+		Badge badge = name == null ? null : users.get(name.toLowerCase(Locale.ROOT));
+		Icon icon = badge == null ? null : icons.get(badge.badge());
+		return icon != null ? icon : icons.get("user");
+	}
+
 	private static boolean shown(Badge badge) {
 		return icons.containsKey(badge.badge()) && (!badge.hidden() || hiddenColor != 0);
+	}
+
+	public static int extractUserIcon(GuiGraphicsExtractor graphics, int left, int y) {
+		Icon icon = icons.get("user");
+		if (icon == null) {
+			return 0;
+		}
+		int guiScale = Math.max(1, Minecraft.getInstance().getWindow().getGuiScale());
+		org.joml.Matrix3x2f pose = new org.joml.Matrix3x2f(graphics.pose());
+		float localScale = (float) Math.hypot(pose.m00(), pose.m01());
+		float pixelsPerUnit = guiScale * localScale;
+		int texel = 2 * Math.max(1, Math.round(ROW_HEIGHT * pixelsPerUnit / icon.height()));
+		int widthPixels = icon.width() * texel;
+		int heightPixels = icon.height() * texel;
+		org.joml.Vector2f corner = pose.transformPosition(new org.joml.Vector2f(left, y));
+		int leftPixels = Math.round(corner.x * guiScale);
+		int topPixels = Math.round(corner.y * guiScale + (ROW_HEIGHT * pixelsPerUnit - heightPixels) / 2.0F);
+		graphics.pose().pushMatrix();
+		graphics.pose().identity();
+		graphics.pose().translate(leftPixels / (float) guiScale, topPixels / (float) guiScale);
+		graphics.pose().scale(texel / (float) guiScale, texel / (float) guiScale);
+		graphics.blit(RenderPipelines.GUI_TEXTURED, icon.texture(), 0, 0, 0.0F, 0.0F, icon.width(), icon.height(), icon.width(), icon.height(), 0xFFFFFFFF);
+		graphics.pose().popMatrix();
+		return Math.round(widthPixels / pixelsPerUnit);
 	}
 
 	public static void extractIcon(GuiGraphicsExtractor graphics, Badge badge, int right, int y) {

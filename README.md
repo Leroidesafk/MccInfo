@@ -95,7 +95,7 @@ Without automatic updates, the toast opens a download link instead (https only),
 
 ## Credits
 
-- [Essential](https://github.com/SparkUniverse/Essential-Mod) and [Trident](https://github.com/pe3ep/Trident), whose menu and interface style MccInfo follows to keep a consistent UI with the mods players already use.
+- [Essential](https://github.com/SparkUniverse/Essential-Mod) and [Island Utils](https://github.com/AsoDesu/IslandUtils), whose menu and interface style MccInfo follows to keep a consistent UI with the mods players already use.
 
 > [!NOTE]
 > MccInfo is not affiliated with, endorsed by or associated with The Noxcrew or Mojang.

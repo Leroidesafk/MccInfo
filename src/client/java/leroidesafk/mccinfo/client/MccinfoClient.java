@@ -61,7 +61,9 @@ public class MccinfoClient implements ClientModInitializer {
 		ModChatOverlay.register();
 		EmojiOverlay.register();
 		FishCollection.register();
+		leroidesafk.mccinfo.client.badges.Badges.register();
 		BestIsland.register();
+		leroidesafk.mccinfo.client.parkour.ParkourLimits.register();
 		EventsScreen.register();
 		OverlayChatDrag.register();
 		// Optional modules last

@@ -206,6 +206,18 @@
       "chars": [
         ""
       ]
+    },
+    {
+      "type": "bitmap",
+      "file": "mccinfo:gui/ui/tags.png",
+      "ascent": 7,
+      "height": 9,
+      "chars": [
+        "\ue110",
+        "\ue111",
+        "\ue112",
+        "\ue113"
+      ]
     }
   ]
 }

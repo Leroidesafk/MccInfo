@@ -18,6 +18,10 @@ final class EmoteModel {
 	record Face(Vector3f[] corners, float[] uv, Vector3f normal) {
 	}
 
+	// Cube corners and rotation
+	record Box(Vector3f from, Vector3f to, Matrix4f local) {
+	}
+
 	// Bone: pivot, rotation, faces and locators
 	static final class Bone {
 		final String name;
@@ -25,6 +29,7 @@ final class EmoteModel {
 		final Vector3f pivot;
 		final Vector3f rotation;
 		final List<Face> faces = new ArrayList<>();
+		final List<Box> boxes = new ArrayList<>();
 		final Map<String, Vector3f> locators = new HashMap<>();
 		Bone parent;
 
@@ -137,21 +142,30 @@ final class EmoteModel {
 		Matrix4f local = new Matrix4f().translate(cubePivot.x - bone.pivot.x, cubePivot.y - bone.pivot.y, cubePivot.z - bone.pivot.z)
 				.rotateZYX((float) Math.toRadians(cubeRotation.z), (float) Math.toRadians(-cubeRotation.y), (float) Math.toRadians(-cubeRotation.x))
 				.translate(-cubePivot.x, -cubePivot.y, -cubePivot.z);
+		bone.boxes.add(new Box(from, to, local));
 		Map<String, float[]> uvs = faceUvs(cube, size, textureWidth, textureHeight);
 		for (Map.Entry<String, float[]> entry : uvs.entrySet()) {
-			Vector3f[] corners = corners(entry.getKey(), from, to);
-			if (corners == null) {
-				continue;
+			Face face = face(entry.getKey(), from, to, local, entry.getValue());
+			if (face != null) {
+				bone.faces.add(face);
 			}
-			for (Vector3f corner : corners) {
-				local.transformPosition(corner);
-			}
-			Vector3f normal = new Vector3f(corners[1]).sub(corners[0]).cross(new Vector3f(corners[2]).sub(corners[0]));
-			if (normal.lengthSquared() > 1.0E-8F) {
-				normal.normalize();
-			}
-			bone.faces.add(new Face(corners, entry.getValue(), normal));
 		}
+	}
+
+	// One side of a box
+	static Face face(String side, Vector3f from, Vector3f to, Matrix4f local, float[] uv) {
+		Vector3f[] corners = corners(side, from, to);
+		if (corners == null) {
+			return null;
+		}
+		for (Vector3f corner : corners) {
+			local.transformPosition(corner);
+		}
+		Vector3f normal = new Vector3f(corners[1]).sub(corners[0]).cross(new Vector3f(corners[2]).sub(corners[0]));
+		if (normal.lengthSquared() > 1.0E-8F) {
+			normal.normalize();
+		}
+		return new Face(corners, uv, normal);
 	}
 
 	// Per face or box uv

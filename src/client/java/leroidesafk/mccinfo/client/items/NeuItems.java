@@ -87,6 +87,7 @@ public final class NeuItems {
 	private static final ChatFormatting GROUP_COUNT_COLOR = ChatFormatting.GOLD;
 	private static final Identifier SETTINGS_MODEL = Identifier.parse("mcc:island_interface/settings/icon");
 	private static ItemStack settingsIcon;
+	public static java.util.function.BooleanSupplier listedMode = () -> false;
 
 	// Category tabs
 	private enum Category {
@@ -176,12 +177,25 @@ public final class NeuItems {
 		private boolean contains(double x, double y) {
 			return x >= this.left && x < this.right && y >= this.top && y < this.bottom;
 		}
+
+		private Box shifted(int dx) {
+			return new Box(this.left + dx, this.top, this.right + dx, this.bottom);
+		}
 	}
 
 	// List position, size and buttons
 	private record Layout(int left, int top, int columns, int rows, Box previous, Box page, Box next, int gridTop, int tabsTop) {
 		private int width() {
 			return this.columns * CELL_SIZE - GAP;
+		}
+
+		private Layout shifted(int dx) {
+			return new Layout(this.left + dx, this.top, this.columns, this.rows, this.previous.shifted(dx), this.page.shifted(dx), this.next.shifted(dx),
+					this.gridTop, this.tabsTop);
+		}
+
+		private boolean headerContains(double x, double y) {
+			return this.previous.contains(x, y) || this.page.contains(x, y) || this.next.contains(x, y);
 		}
 
 		private int perPage() {
@@ -325,15 +339,17 @@ public final class NeuItems {
 	private static final Map<String, Group> GROUP_BY_ID = new HashMap<>();
 	private static final Set<String> NESTED_GROUPS = new HashSet<>();
 	private static final int MAX_GROUP_DEPTH = 8;
-	// Current search, category and page
+	private static final Map<String, List<String>> VARIANTS = new java.util.concurrent.ConcurrentHashMap<>();
 	private static List<Tile> filtered = List.of();
 	private static final Set<String> EXPANDED = new HashSet<>();
 	private static final Set<String> CONTAINERS = new HashSet<>();
 	private static final int TITLE_SLOT = 8;
 	private static JsonObject cosmeticDefaults;
+	// Current search, category and pages
 	private static String query = "";
 	private static Category category = Category.GLOBAL;
 	private static int page;
+	private static int favoritePage;
 
 	private NeuItems() {
 	}
@@ -400,6 +416,13 @@ public final class NeuItems {
 				if (!search.visible || !search.isFocused() || event.key() == GLFW.GLFW_KEY_ESCAPE) {
 					return true;
 				}
+				if (event.key() == GLFW.GLFW_KEY_ENTER || event.key() == GLFW.GLFW_KEY_KP_ENTER) {
+					search.setFocused(false);
+					if (current.getFocused() == search) {
+						current.setFocused(null);
+					}
+					return false;
+				}
 				search.keyPressed(event);
 				return false;
 			});
@@ -425,7 +448,9 @@ public final class NeuItems {
 
 	// Dim the inventory in Recipe Mode
 	private static void dimForRecipes(Screen screen, GuiGraphicsExtractor graphics) {
-		if (!ModConfig.get().mccJei || ITEMS.isEmpty() || !PrivateKeys.RECIPE_MODE.held() || !(screen instanceof AbstractContainerScreen<?> container)) {
+		boolean recipes = PrivateKeys.RECIPE_MODE.held();
+		boolean listed = !recipes && listedMode.getAsBoolean();
+		if (!ModConfig.get().mccJei || ITEMS.isEmpty() || (!recipes && !listed) || !(screen instanceof AbstractContainerScreen<?> container)) {
 			return;
 		}
 		ContainerHoveredSlotAccessor accessor = (ContainerHoveredSlotAccessor) screen;
@@ -434,12 +459,13 @@ public final class NeuItems {
 			if (!slot.isActive() || !slot.hasItem()) {
 				continue;
 			}
-			String id = idByName(slot.getItem().getHoverName().getString());
-			if (id != null && NeuCrafts.hasCrafts(id)) {
+			String hoverName = slot.getItem().getHoverName().getString();
+			String id = listed ? null : idByName(hoverName);
+			if (listed ? BY_NAME.containsKey(searchName(hoverName)) : id != null && hasVariantCrafts(id)) {
 				int x = accessor.mccinfo$getLeftPos() + slot.x - 1;
 				int y = accessor.mccinfo$getTopPos() + slot.y - 1;
 				holes.add(new Box(x, y, x + SQUARE_SIZE, y + SQUARE_SIZE));
-				if (slot == accessor.mccinfo$getHoveredSlot()) {
+				if (recipes && slot == accessor.mccinfo$getHoveredSlot()) {
 					pointer(graphics);
 				}
 			}
@@ -570,9 +596,17 @@ public final class NeuItems {
 	}
 
 	static List<String> variants(String id) {
+		return VARIANTS.computeIfAbsent(id, NeuItems::findVariants);
+	}
+
+	static boolean hasVariantCrafts(String id) {
+		return variants(id).stream().anyMatch(NeuCrafts::hasCrafts);
+	}
+
+	private static List<String> findVariants(String id) {
 		for (Group group : GROUPS) {
 			List<String> ids = group.members().stream().filter(member -> member.entry() != null).map(member -> member.entry().id).toList();
-			if (ids.contains(group.id()) && ids.contains(id)) {
+			if (ids.contains(id) && (ids.contains(group.id()) || ids.stream().allMatch(other -> variantOf(group.id(), other)))) {
 				List<String> variants = new ArrayList<>();
 				variants.add(id);
 				ids.stream().filter(other -> !other.equals(id)).forEach(variants::add);
@@ -580,6 +614,12 @@ public final class NeuItems {
 			}
 		}
 		return List.of(id);
+	}
+
+	private static boolean variantOf(String groupId, String id) {
+		int slash = id.lastIndexOf('/') + 1;
+		String base = id.startsWith("blueprint_", slash) ? id.substring(0, slash) + id.substring(slash + "blueprint_".length()) : id;
+		return base.startsWith(groupId + "_");
 	}
 
 	public static ItemStack stackByName(String name) {
@@ -592,9 +632,50 @@ public final class NeuItems {
 		return ItemStack.EMPTY;
 	}
 
+	public static List<ItemStack> searchByName(String query, int limit) {
+		String lower = query.strip().toLowerCase(Locale.ROOT);
+		if (lower.isEmpty()) {
+			return List.of();
+		}
+		List<Entry> starts = new ArrayList<>();
+		List<Entry> contains = new ArrayList<>();
+		java.util.Set<String> seen = new java.util.HashSet<>();
+		for (Entry entry : ITEMS) {
+			if (!entry.name.contains(lower) || !seen.add(entry.name)) {
+				continue;
+			}
+			(entry.name.startsWith(lower) ? starts : contains).add(entry);
+		}
+		List<ItemStack> found = new ArrayList<>();
+		for (List<Entry> group : List.of(starts, contains)) {
+			for (Entry entry : group) {
+				if (found.size() >= limit) {
+					return found;
+				}
+				ItemStack stack = entry.stack();
+				if (!stack.isEmpty()) {
+					found.add(stack);
+				}
+			}
+		}
+		return found;
+	}
+
+	private static String searchName(String name) {
+		return name.replaceAll("[\\uE000-\\uF8FF]", "").strip().toLowerCase(Locale.ROOT);
+	}
+
 	public static String idByName(String name) {
-		List<Entry> matches = BY_NAME.get(name.strip().toLowerCase(Locale.ROOT));
-		return matches != null && matches.size() == 1 ? matches.getFirst().id : null;
+		List<Entry> matches = BY_NAME.get(searchName(name));
+		if (matches == null || matches.isEmpty()) {
+			return null;
+		}
+		String first = matches.getFirst().id;
+		if (matches.size() == 1) {
+			return first;
+		}
+		List<String> variants = variants(first);
+		return matches.stream().allMatch(entry -> variants.contains(entry.id)) ? first : null;
 	}
 
 	public static void clear() {
@@ -605,6 +686,7 @@ public final class NeuItems {
 		COST_ICONS.clear();
 		GROUPS.clear();
 		GROUP_BY_ID.clear();
+		VARIANTS.clear();
 		NESTED_GROUPS.clear();
 		CONTAINERS.clear();
 		cosmeticDefaults = null;
@@ -624,6 +706,7 @@ public final class NeuItems {
 			COST_ICONS.clear();
 			GROUPS.clear();
 			GROUP_BY_ID.clear();
+		VARIANTS.clear();
 			NESTED_GROUPS.clear();
 		}
 		if (object.has("items") && object.get("items").isJsonArray()) {
@@ -677,6 +760,7 @@ public final class NeuItems {
 			ITEMS.forEach(entry -> byId.put(entry.id, entry));
 			GROUPS.clear();
 			GROUP_BY_ID.clear();
+		VARIANTS.clear();
 			NESTED_GROUPS.clear();
 			for (JsonElement element : object.getAsJsonArray("groups")) {
 				if (element.isJsonObject()) {
@@ -752,10 +836,12 @@ public final class NeuItems {
 	// Search and category filter, groups opened or closed
 	private static void refilter() {
 		String lower = query.strip().toLowerCase(Locale.ROOT);
-		if (!lower.isEmpty()) {
-			Set<Entry> groupMatches = new HashSet<>();
-			GROUPS.stream().filter(group -> group.name().contains(lower)).forEach(group -> groupMatches.addAll(group.entries()));
-			filtered = ITEMS.stream().filter(entry -> category.accepts(entry.category) && (entry.matches(lower) || groupMatches.contains(entry)))
+		List<String> terms = searchTerms(lower);
+		if (!terms.isEmpty()) {
+			Map<Entry, List<String>> groupNames = new HashMap<>();
+			GROUPS.forEach(group -> group.entries().forEach(entry -> groupNames.computeIfAbsent(entry, key -> new ArrayList<>()).add(group.name())));
+			filtered = ITEMS.stream().filter(entry -> category.accepts(entry.category) && terms.stream()
+							.allMatch(term -> entry.matches(term) || groupNames.getOrDefault(entry, List.of()).stream().anyMatch(name -> name.contains(term))))
 					.sorted(Comparator.comparingInt(entry -> entry.category.ordinal())).map(entry -> new Tile(entry, null)).toList();
 			return;
 		}
@@ -778,6 +864,18 @@ public final class NeuItems {
 			}
 		}
 		filtered = List.copyOf(tiles);
+	}
+
+	private static List<String> searchTerms(String lower) {
+		List<String> terms = new ArrayList<>();
+		java.util.regex.Matcher matcher = java.util.regex.Pattern.compile("\"([^\"]*)\"?|(\\S+)").matcher(lower);
+		while (matcher.find()) {
+			String term = (matcher.group(1) != null ? matcher.group(1) : matcher.group(2)).strip();
+			if (!term.isEmpty()) {
+				terms.add(term);
+			}
+		}
+		return terms;
 	}
 
 	private static boolean expanded(Group group) {
@@ -879,10 +977,18 @@ public final class NeuItems {
 	}
 
 	private static int pages(Layout layout) {
-		return Math.max(1, (filtered.size() + layout.perPage() - 1) / layout.perPage());
+		return pages(layout, filtered.size());
+	}
+
+	private static int pages(Layout layout, int count) {
+		return Math.max(1, (count + layout.perPage() - 1) / layout.perPage());
 	}
 
 	private static int indexAt(Layout layout, double mouseX, double mouseY) {
+		return indexAt(layout, mouseX, mouseY, page, filtered.size());
+	}
+
+	private static int indexAt(Layout layout, double mouseX, double mouseY, int shownPage, int count) {
 		if (mouseX < layout.left() || mouseY < layout.gridTop()) {
 			return -1;
 		}
@@ -892,12 +998,84 @@ public final class NeuItems {
 				|| mouseX - layout.left() - column * CELL_SIZE >= SQUARE_SIZE || mouseY - layout.gridTop() - row * CELL_SIZE >= SQUARE_SIZE) {
 			return -1;
 		}
-		int index = page * layout.perPage() + row * layout.columns() + column;
-		return index < filtered.size() ? index : -1;
+		int index = shownPage * layout.perPage() + row * layout.columns() + column;
+		return index < count ? index : -1;
+	}
+
+	// Favorite panel, middle click to add or remove
+	private static List<Entry> favorites() {
+		List<String> ids = ModConfig.get().neuFavorites;
+		List<Entry> entries = new ArrayList<>();
+		if (ids != null) {
+			for (String id : ids) {
+				Entry entry = BY_ID.get(id);
+				if (entry != null) {
+					entries.add(entry);
+				}
+			}
+		}
+		return entries;
+	}
+
+	private static Layout favoritesLayout(Layout main) {
+		return main == null || favorites().isEmpty() ? null : main.shifted(MARGIN - main.left());
+	}
+
+	private static void toggleFavorite(String id) {
+		ModConfig config = ModConfig.get();
+		if (config.neuFavorites == null) {
+			config.neuFavorites = new ArrayList<>();
+		}
+		if (!config.neuFavorites.remove(id)) {
+			config.neuFavorites.add(id);
+		}
+		config.save();
+		clickSound();
+	}
+
+	private static boolean overFavorites(Layout layout, double mouseX, double mouseY) {
+		if (layout == null) {
+			return false;
+		}
+		int count = favorites().size();
+		int shownPage = Math.clamp(favoritePage, 0, pages(layout, count) - 1);
+		return layout.headerContains(mouseX, mouseY) || indexAt(layout, mouseX, mouseY, shownPage, count) >= 0;
+	}
+
+	private static boolean clickFavorites(Screen screen, Layout layout, MouseButtonEvent event) {
+		List<Entry> entries = favorites();
+		int pages = pages(layout, entries.size());
+		favoritePage = Math.clamp(favoritePage, 0, pages - 1);
+		int index = indexAt(layout, event.x(), event.y(), favoritePage, entries.size());
+		if (index >= 0) {
+			String id = entries.get(index).id;
+			if (event.button() == GLFW.GLFW_MOUSE_BUTTON_MIDDLE) {
+				toggleFavorite(id);
+			} else if (event.button() == GLFW.GLFW_MOUSE_BUTTON_LEFT || event.button() == GLFW.GLFW_MOUSE_BUTTON_RIGHT) {
+				NeuCrafts.open(screen, id, event.button() == GLFW.GLFW_MOUSE_BUTTON_LEFT);
+			}
+		} else if (layout.previous().contains(event.x(), event.y()) && favoritePage > 0) {
+			favoritePage--;
+			clickSound();
+		} else if (layout.next().contains(event.x(), event.y()) && favoritePage < pages - 1) {
+			favoritePage++;
+			clickSound();
+		}
+		return true;
 	}
 
 	private static boolean scroll(Screen screen, double mouseX, double mouseY, double scrollY) {
 		Layout layout = shown() ? layout(screen) : null;
+		Layout favorites = favoritesLayout(layout);
+		if (scrollY != 0 && overFavorites(favorites, mouseX, mouseY)) {
+			int pages = pages(favorites, favorites().size());
+			int previous = favoritePage;
+			favoritePage = Math.clamp(favoritePage - (int) Math.signum(scrollY), 0, pages - 1);
+			if (favoritePage != previous) {
+				clickSound();
+			}
+			return true;
+		}
 		if (layout == null || scrollY == 0 || !layout.contains(mouseX, mouseY)) {
 			return false;
 		}
@@ -909,9 +1087,13 @@ public final class NeuItems {
 		return true;
 	}
 
-	// Clicks: tabs, pages, groups and items
+	// Clicks: favorites, tabs, pages, groups and items
 	private static boolean click(Screen screen, MouseButtonEvent event) {
 		Layout layout = shown() ? layout(screen) : null;
+		Layout favorites = favoritesLayout(layout);
+		if (overFavorites(favorites, event.x(), event.y())) {
+			return clickFavorites(screen, favorites, event);
+		}
 		if (layout == null || !layout.contains(event.x(), event.y())) {
 			return false;
 		}
@@ -931,6 +1113,8 @@ public final class NeuItems {
 			}
 			refilter();
 			clickSound();
+		} else if (index >= 0 && event.button() == GLFW.GLFW_MOUSE_BUTTON_MIDDLE) {
+			toggleFavorite(filtered.get(index).entry().id);
 		} else if (index >= 0 && (event.button() == GLFW.GLFW_MOUSE_BUTTON_LEFT || event.button() == GLFW.GLFW_MOUSE_BUTTON_RIGHT)) {
 			NeuCrafts.open(screen, filtered.get(index).entry().id, event.button() == GLFW.GLFW_MOUSE_BUTTON_LEFT);
 		} else if (layout.previous().contains(event.x(), event.y()) && page > 0) {
@@ -951,6 +1135,7 @@ public final class NeuItems {
 		Layout layout = available() ? layout(screenWidth, screenHeight, inventoryRight) : null;
 		if (layout != null) {
 			extract(null, layout, graphics, mouseX, mouseY);
+			extractFavorites(null, favoritesLayout(layout), graphics, mouseX, mouseY);
 		}
 	}
 
@@ -969,6 +1154,70 @@ public final class NeuItems {
 			return;
 		}
 		extract(screen, layout, graphics, mouseX, mouseY);
+		extractFavorites(screen, favoritesLayout(layout), graphics, mouseX, mouseY);
+	}
+
+	private static void extractFavorites(Screen screen, Layout layout, GuiGraphicsExtractor graphics, int mouseX, int mouseY) {
+		if (layout == null) {
+			return;
+		}
+		List<Entry> entries = favorites();
+		graphics.nextStratum();
+		Font font = Minecraft.getInstance().font;
+		int pages = pages(layout, entries.size());
+		favoritePage = Math.clamp(favoritePage, 0, pages - 1);
+		Component title = Component.translatable("screen.mccinfo.neu_items.favorite");
+		if (pages > 1) {
+			title = Component.empty().append(title).append(" " + (favoritePage + 1) + "/" + pages);
+		}
+		extractBox(graphics, font, layout.page(), title, false, true);
+		extractBox(graphics, font, layout.previous(), Component.translatable("screen.mccinfo.neu_items.previous"),
+				layout.previous().contains(mouseX, mouseY), favoritePage > 0);
+		extractBox(graphics, font, layout.next(), Component.translatable("screen.mccinfo.neu_items.next"),
+				layout.next().contains(mouseX, mouseY), favoritePage < pages - 1);
+		int hovered = indexAt(layout, mouseX, mouseY, favoritePage, entries.size());
+		int first = favoritePage * layout.perPage();
+		List<Badge> badges = new ArrayList<>();
+		for (int slot = 0; slot < layout.perPage(); slot++) {
+			int x = layout.left() + slot % layout.columns() * CELL_SIZE;
+			int y = layout.gridTop() + slot / layout.columns() * CELL_SIZE;
+			int index = first + slot;
+			if (index >= entries.size()) {
+				break;
+			}
+			Entry entry = entries.get(index);
+			int background = entry.outdated ? (index == hovered ? OUTDATED_HOVER_COLOR : OUTDATED_COLOR) : (index == hovered ? HOVER_COLOR : BOX_COLOR);
+			OverlayStyle.fillRounded(graphics, x, y, SQUARE_SIZE, SQUARE_SIZE, background);
+			if (entry.stack().isEmpty()) {
+				continue;
+			}
+			graphics.item(entry.stack(), x + 1, y + 1);
+			if (entry.badge != null) {
+				badges.add(new Badge(entry.badge, x, y));
+			}
+		}
+		if (!badges.isEmpty()) {
+			graphics.nextStratum();
+			badges.forEach(badge -> badge(graphics, badge));
+		}
+		if (hovered >= 0) {
+			ItemStack stack = entries.get(hovered).stack();
+			if (!stack.isEmpty()) {
+				graphics.setTooltipForNextFrame(font, stack, mouseX, mouseY);
+				hoveredStack = stack;
+				hoveredAt = System.currentTimeMillis();
+			}
+		}
+		if ((hovered >= 0 && NeuCrafts.hasCrafts(entries.get(hovered).id)) || (layout.previous().contains(mouseX, mouseY) && favoritePage > 0)
+				|| (layout.next().contains(mouseX, mouseY) && favoritePage < pages - 1)) {
+			pointer(graphics);
+		}
+		ItemStack carried = screen instanceof AbstractContainerScreen<?> container ? container.getMenu().getCarried() : ItemStack.EMPTY;
+		if (!carried.isEmpty() && overFavorites(layout, mouseX, mouseY)) {
+			graphics.nextStratum();
+			graphics.item(carried, mouseX - 8, mouseY - 8);
+			graphics.itemDecorations(font, carried, mouseX - 8, mouseY - 8);
+		}
 	}
 
 	// Tabs, grid, pages and the hovered tooltip

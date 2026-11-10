@@ -1,9 +1,14 @@
 package leroidesafk.mccinfo.client.emote;
 
+import com.mojang.blaze3d.pipeline.BlendFunction;
+import com.mojang.blaze3d.pipeline.ColorTargetState;
+import com.mojang.blaze3d.pipeline.DepthStencilState;
 import com.mojang.blaze3d.pipeline.RenderPipeline;
+import com.mojang.blaze3d.platform.CompareOp;
 import com.mojang.blaze3d.vertex.PoseStack;
 import leroidesafk.mccinfo.Mccinfo;
 import leroidesafk.mccinfo.client.mixin.accessor.RenderTypeAccessor;
+import leroidesafk.mccinfo.client.relay.ModUsers;
 import net.minecraft.client.renderer.BindGroupLayouts;
 import net.minecraft.client.renderer.RenderPipelines;
 import net.minecraft.client.renderer.rendertype.RenderSetup;
@@ -76,6 +81,8 @@ final class EmoteRender {
 	static Map<EmoteModel.Bone, Matrix4f> pose(EmoteLibrary.Emote emote, Phase phase, Molang.Scope scope) {
 		Map<String, float[]> animated = new HashMap<>();
 		if (phase != null) {
+			scope.animTime = phase.time();
+			emote.exprVariables.forEach((k, expr) -> scope.set(k, expr.eval(scope)));
 			phase.animation().sample(phase.time(), scope, animated);
 		}
 		return emote.model.pose(animated);
@@ -127,38 +134,54 @@ final class EmoteRender {
 
 	// Glowing and lit parts, player bones skipped
 	static void submitModel(SubmitNodeCollector collector, PoseStack poseStack, EmoteLibrary.Emote emote, Map<EmoteModel.Bone, Matrix4f> matrices, int light,
-			Quaternionf facing) {
-		if (emote.texture == null || emote.model.bones.isEmpty()) {
+			Quaternionf facing, ModUsers.Icon icon) {
+		if (emote.model.bones.isEmpty()) {
 			return;
 		}
 		boolean player = EmotePlayerPose.animatesPlayer(emote.model);
 		boolean anyGlow = false;
 		boolean anyLit = false;
+		boolean iconGlow = false;
+		boolean iconLit = false;
 		for (EmoteModel.Bone bone : emote.model.bones) {
 			if (bone.faces.isEmpty() || player && EmotePlayerPose.PARTS.contains(bone.name)) {
 				continue;
 			}
-			if (emote.glowing.contains(bone)) {
+			boolean glowing = emote.glowing.contains(bone);
+			if (emote.icons.contains(bone)) {
+				iconGlow |= glowing;
+				iconLit |= !glowing;
+			} else if (glowing) {
 				anyGlow = true;
 			} else {
 				anyLit = true;
 			}
 		}
-		if (anyGlow) {
-			submitBones(collector, poseStack, GLOW.apply(emote.texture), emote, matrices, FULL_BRIGHT, true, player, facing);
+		if (emote.texture != null && anyGlow) {
+			submitBones(collector, poseStack, GLOW.apply(emote.texture), emote, matrices, FULL_BRIGHT, true, player, facing, null);
 		}
-		if (anyLit) {
-			submitBones(collector, poseStack, RenderTypes.entityCutoutCull(emote.texture), emote, matrices, light, false, player, facing);
+		if (emote.texture != null && anyLit) {
+			submitBones(collector, poseStack, RenderTypes.entityCutoutCull(emote.texture), emote, matrices, light, false, player, facing, null);
+		}
+		// Badge bones on the badge texture
+		if (icon != null && iconGlow) {
+			submitBones(collector, poseStack, GLOW.apply(icon.texture()), emote, matrices, FULL_BRIGHT, true, player, facing, icon);
+		}
+		if (icon != null && iconLit) {
+			submitBones(collector, poseStack, RenderTypes.entityCutoutCull(icon.texture()), emote, matrices, light, false, player, facing, icon);
 		}
 	}
 
 	// Bone faces, billboards facing the camera
 	private static void submitBones(SubmitNodeCollector collector, PoseStack poseStack, RenderType type, EmoteLibrary.Emote emote,
-			Map<EmoteModel.Bone, Matrix4f> matrices, int light, boolean glow, boolean player, Quaternionf facing) {
+			Map<EmoteModel.Bone, Matrix4f> matrices, int light, boolean glow, boolean player, Quaternionf facing, ModUsers.Icon icon) {
 		collector.submitCustomGeometry(poseStack, type, (pose, buffer) -> {
 			for (EmoteModel.Bone bone : emote.model.bones) {
 				Matrix4f boneMatrix = matrices.get(bone);
-				if (boneMatrix == null || bone.faces.isEmpty() || Math.abs(boneMatrix.determinant3x3()) < HIDDEN
+				// Badge pixels or model faces
+				List<EmoteModel.Face> faces = emote.icons.contains(bone) != (icon != null) ? List.of()
+						: icon != null ? EmotePlayerIcon.faces(bone, icon.width(), icon.height()) : bone.faces;
+				if (boneMatrix == null || faces.isEmpty() || Math.abs(boneMatrix.determinant3x3()) < HIDDEN
 						|| emote.glowing.contains(bone) != glow || player && EmotePlayerPose.PARTS.contains(bone.name)) {
 					continue;
 				}
@@ -169,7 +192,7 @@ final class EmoteRender {
 					matrix = new Matrix4f(pose.pose()).translate(pivot).rotate(facing).scale(scale);
 				}
 				Matrix3f normals = new Matrix3f(matrix);
-				for (EmoteModel.Face face : bone.faces) {
+				for (EmoteModel.Face face : faces) {
 					Vector3f normal = normals.transform(new Vector3f(face.normal()));
 					if (normal.lengthSquared() > 1.0E-8F) {
 						normal.normalize();
@@ -190,18 +213,33 @@ final class EmoteRender {
 				.setNormal(normal.x, normal.y, normal.z);
 	}
 
-	// Particle quads facing the camera
+	// Particle quads, facing the camera or on a fixed plane
+	private static final float PARTICLE_LAYER = 0.02F;
+	private static final RenderPipeline PARTICLE_PIPELINE = RenderPipeline.builder(RenderPipelines.ENTITY_EMISSIVE_SNIPPET)
+			.withLocation(Mccinfo.id("pipeline/emote_particle"))
+			.withShaderDefine("ALPHA_CUTOUT", 0.1F)
+			.withShaderDefine("NO_CARDINAL_LIGHTING")
+			.withBindGroupLayout(BindGroupLayouts.SAMPLER1)
+			.withColorTargetState(new ColorTargetState(BlendFunction.TRANSLUCENT))
+			.withCull(false)
+			.withDepthStencilState(new DepthStencilState(CompareOp.GREATER_THAN_OR_EQUAL, false))
+			.build();
+	private static final Function<Identifier, RenderType> PARTICLE = Util.memoize(texture -> RenderTypeAccessor.mccinfo$create("mccinfo_emote_particle",
+			RenderSetup.builder(PARTICLE_PIPELINE).withTexture("Sampler0", texture).useOverlay().sortOnUpload().createRenderSetup()));
+
 	static void submitParticles(SubmitNodeCollector collector, PoseStack poseStack, List<EmoteParticle.Emitter> emitters, Vector3f camera,
 			Quaternionf rotation, float partial) {
 		Vector3f right = rotation.transform(new Vector3f(1.0F, 0.0F, 0.0F));
 		Vector3f up = rotation.transform(new Vector3f(0.0F, 1.0F, 0.0F));
 		Vector3f forward = rotation.transform(new Vector3f(0.0F, 0.0F, 1.0F));
-		for (EmoteParticle.Emitter emitter : emitters) {
+		for (int index = 0; index < emitters.size(); index++) {
+			EmoteParticle.Emitter emitter = emitters.get(index);
 			EmoteParticle definition = emitter.definition();
 			if (emitter.particles.isEmpty()) {
 				continue;
 			}
-			collector.submitCustomGeometry(poseStack, RenderTypes.entityTranslucentEmissive(definition.texture), (pose, buffer) -> {
+			float layer = index * PARTICLE_LAYER;
+			collector.submitCustomGeometry(poseStack, PARTICLE.apply(definition.texture), (pose, buffer) -> {
 				for (EmoteParticle.Particle particle : emitter.particles) {
 					emitter.bind(particle);
 					Vector3f center = new Vector3f(particle.position).add(new Vector3f(particle.velocity).mul(partial * 0.05F));
@@ -209,18 +247,37 @@ final class EmoteRender {
 						center.add(emitter.origin);
 					}
 					center.sub(camera);
+					if (layer > 0.0F && center.lengthSquared() > layer * layer) {
+						center.sub(new Vector3f(center).normalize().mul(layer));
+					}
 					float[] size = definition.size(emitter.scope);
 					float[] uv = definition.uv(particle, emitter.scope);
 					int color = definition.color(emitter.scope);
 					Vector3f axisX = new Vector3f(right);
 					Vector3f axisY = new Vector3f(up);
-					if (definition.yAxisOnly) {
-						axisY.set(0.0F, 1.0F, 0.0F);
-						axisX.set(forward.z, 0.0F, -forward.x);
-						if (axisX.lengthSquared() < 1.0E-6F) {
-							axisX.set(1.0F, 0.0F, 0.0F);
+					switch (definition.facing) {
+						case Y_AXIS -> {
+							axisY.set(0.0F, 1.0F, 0.0F);
+							axisX.set(forward.z, 0.0F, -forward.x);
+							if (axisX.lengthSquared() < 1.0E-6F) {
+								axisX.set(1.0F, 0.0F, 0.0F);
+							}
+							axisX.normalize();
 						}
-						axisX.normalize();
+						case PLANE_XY -> {
+							axisX.set(1.0F, 0.0F, 0.0F);
+							axisY.set(0.0F, 1.0F, 0.0F);
+						}
+						case PLANE_XZ -> {
+							axisX.set(1.0F, 0.0F, 0.0F);
+							axisY.set(0.0F, 0.0F, -1.0F);
+						}
+						case PLANE_YZ -> {
+							axisX.set(0.0F, 0.0F, 1.0F);
+							axisY.set(0.0F, 1.0F, 0.0F);
+						}
+						default -> {
+						}
 					}
 					if (particle.rotation != 0.0F) {
 						float angle = (float) Math.toRadians(particle.rotation);

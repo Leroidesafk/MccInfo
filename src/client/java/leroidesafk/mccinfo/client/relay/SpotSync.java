@@ -38,6 +38,11 @@ import java.util.concurrent.CompletionStage;
 // Connection to the relay: perms, chat, voice and every other message
 public final class SpotSync {
 	private static final int RECONNECT_DELAY_TICKS = 100;
+	// Identity check: timeout, retries with backoff, delay after joining
+	private static final int AUTH_TIMEOUT_TICKS = 400;
+	private static final int AUTH_RETRY_TICKS = 100;
+	private static final int MAX_AUTH_BACKOFF = 3;
+	private static final int AUTH_DELAY_TICKS = 100;
 	private static final int SEND_INTERVAL_TICKS = 20;
 	private static final Duration CONNECT_TIMEOUT = Duration.ofSeconds(10);
 	private static final int MAX_MESSAGE_CHARS = 1 << 20;
@@ -75,6 +80,15 @@ public final class SpotSync {
 	private static WebSocket socket;
 	private static State state = State.OFF;
 	private static boolean authFailureLogged;
+	private static boolean authRetryLogged;
+	private static int authTimeout;
+	private static int authFailures;
+	private static int ticksOnIsland;
+	private static String pendingServerId;
+	private static String fallbackServerId;
+	// Token to skip Mojang on the next connection
+	private static String resumeToken;
+	private static java.util.UUID resumeProfile;
 	private static String url;
 	private static int generation;
 	private static boolean connecting;
@@ -123,6 +137,7 @@ public final class SpotSync {
 		}
 		// Off MCC Island: disconnect and reset everything
 		if (!MccIsland.isConnected()) {
+			ticksOnIsland = 0;
 			if (state != State.OFF) {
 				disconnect();
 				state = State.OFF;
@@ -137,6 +152,9 @@ public final class SpotSync {
 		if (state == State.OFF) {
 			state = State.CONNECTING;
 		}
+		if (ticksOnIsland < AUTH_DELAY_TICKS) {
+			ticksOnIsland++;
+		}
 		if (!wanted.equals(url)) {
 			disconnect();
 		}
@@ -145,6 +163,19 @@ public final class SpotSync {
 				connect(client, wanted);
 			}
 			return;
+		}
+		if (pendingServerId != null && ticksOnIsland >= AUTH_DELAY_TICKS) {
+			String serverId = pendingServerId;
+			pendingServerId = null;
+			authenticate(client, serverId);
+		}
+		// Not confirmed in time: new connection
+		if (!authenticated && --authTimeout <= 0) {
+			if (!authRetryLogged) {
+				authRetryLogged = true;
+				Mccinfo.LOGGER.warn("Sync: identity not confirmed by the relay, reconnecting");
+			}
+			disconnect();
 		}
 	}
 
@@ -208,6 +239,7 @@ public final class SpotSync {
 		hello.addProperty("version", Permissions.MOD_VERSION);
 		sendText(Minecraft.getInstance(), hello.toString());
 		authenticated = false;
+		authTimeout = AUTH_TIMEOUT_TICKS;
 		RESEND.forEach(Runnable::run);
 	}
 
@@ -223,6 +255,7 @@ public final class SpotSync {
 			socket = null;
 		}
 		connecting = false;
+		pendingServerId = null;
 		state = State.FAILED;
 		reconnectCooldown = RECONNECT_DELAY_TICKS;
 		RockPaperScissors.disconnected();
@@ -234,6 +267,7 @@ public final class SpotSync {
 
 	private static void disconnect() {
 		generation++;
+		pendingServerId = null;
 		if (socket != null) {
 			socket.sendClose(WebSocket.NORMAL_CLOSURE, "");
 			socket = null;
@@ -393,7 +427,7 @@ public final class SpotSync {
 		return true;
 	}
 
-	// Proves the account to the relay through Mojang, the token is never sent
+	// Proves the account to the relay through Mojang, retried with backoff
 	private static void authenticate(Minecraft client, String serverId) {
 		int attempt = generation;
 		var user = client.getUser();
@@ -410,8 +444,10 @@ public final class SpotSync {
 			if (error != null) {
 				if (!authFailureLogged) {
 					authFailureLogged = true;
-					Mccinfo.LOGGER.warn("Sync: identity not verified by Mojang, no permissions ({})", String.valueOf(error));
+					Mccinfo.LOGGER.warn("Sync: identity not verified by Mojang, retrying ({})", String.valueOf(error));
 				}
+				authTimeout = Math.min(authTimeout, AUTH_RETRY_TICKS << Math.min(authFailures, MAX_AUTH_BACKOFF));
+				authFailures++;
 				return;
 			}
 			com.google.gson.JsonObject auth = new com.google.gson.JsonObject();
@@ -436,10 +472,31 @@ public final class SpotSync {
 		}
 		try {
 			switch (type) {
+				// Resume token first, Mojang check if it is refused
 				case "challenge" -> {
 					if (object.has("serverId")) {
-						authenticate(client, object.get("serverId").getAsString());
+						String serverId = object.get("serverId").getAsString();
+						if (resumeToken != null && client.getUser().getProfileId().equals(resumeProfile)) {
+							fallbackServerId = serverId;
+							com.google.gson.JsonObject resume = new com.google.gson.JsonObject();
+							resume.addProperty("type", "resume");
+							resume.addProperty("token", resumeToken);
+							resumeToken = null;
+							sendText(client, resume.toString());
+						} else {
+							pendingServerId = serverId;
+						}
 					}
+				}
+				case "resume_token" -> {
+					if (object.has("token")) {
+						resumeToken = object.get("token").getAsString();
+						resumeProfile = client.getUser().getProfileId();
+					}
+				}
+				case "resume_failed" -> {
+					pendingServerId = fallbackServerId;
+					fallbackServerId = null;
 				}
 				case "perms" -> {
 					PermsMessage perms = GSON.fromJson(object, PermsMessage.class);
@@ -448,6 +505,7 @@ public final class SpotSync {
 					Permissions.setDownloadLink(perms.downloadLink());
 					if (Boolean.TRUE.equals(perms.authenticated()) && !authenticated) {
 						authenticated = true;
+						authFailures = 0;
 						RESEND.forEach(Runnable::run);
 					}
 					ModUpdater.offer(Boolean.TRUE.equals(perms.outdated()), perms.requiredVersion(), perms.update(), !Boolean.FALSE.equals(perms.autoUpdate()), perms.downloadUrl());
@@ -470,7 +528,9 @@ public final class SpotSync {
 				case "neu_items" -> NeuItems.receive(object);
 				case "neu_npcs" -> NeuNpcs.receive(object);
 				case "patchnotes" -> PatchNotes.receive(object);
+				case "settings_info" -> leroidesafk.mccinfo.client.gui.SettingsInfo.receive(object);
 				case "regions" -> Regions.receive(object);
+				case "quests" -> leroidesafk.mccinfo.client.quests.QuestLock.receive(object);
 				case "fish_list" -> FishCollection.receive(object);
 				case "badge_list" -> leroidesafk.mccinfo.client.badges.Badges.receive(object);
 				case "emojis" -> Emojis.receive(object);

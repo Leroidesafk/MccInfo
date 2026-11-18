@@ -6,11 +6,15 @@ import leroidesafk.mccinfo.client.relay.Permissions;
 import leroidesafk.mccinfo.Mccinfo;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents;
 import net.fabricmc.fabric.api.client.rendering.v1.hud.HudElementRegistry;
+import net.fabricmc.fabric.api.client.screen.v1.ScreenEvents;
+import net.fabricmc.fabric.api.client.screen.v1.ScreenMouseEvents;
 import net.minecraft.client.DeltaTracker;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.screens.ChatScreen;
+import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
 import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.network.chat.Component;
 import net.minecraft.util.FormattedCharSequence;
@@ -72,9 +76,21 @@ public final class UpdateToast {
 	private UpdateToast() {
 	}
 
+	// HUD, and over inventories and chests
 	public static void register() {
 		HudElementRegistry.addLast(Mccinfo.id("update_toast"), UpdateToast::extract);
 		ClientPlayConnectionEvents.JOIN.register((handler, sender, client) -> dismissed = false);
+		ScreenEvents.AFTER_INIT.register((client, screen, width, height) -> {
+			if (screen instanceof AbstractContainerScreen<?>) {
+				ScreenEvents.afterForeground(screen).register((current, graphics, mouseX, mouseY, a) -> extractOverChat(graphics));
+				ScreenMouseEvents.allowMouseClick(screen).register((current, event) -> !mouseClicked(event));
+			}
+		});
+	}
+
+	// Screens that draw the box themselves
+	public static boolean overScreen(Screen screen) {
+		return screen instanceof ChatScreen || screen instanceof AbstractContainerScreen<?>;
 	}
 
 	static void show() {
@@ -87,9 +103,9 @@ public final class UpdateToast {
 		return !dismissed && client.level != null && MccIsland.isConnected() && ModUpdater.requiredVersion() != null;
 	}
 
-	// Chat open: drawn by the chat screen instead, above it
+	// HUD drawing, unless a screen draws it
 	private static void extract(GuiGraphicsExtractor graphics, DeltaTracker deltaTracker) {
-		if (!(Minecraft.getInstance().gui.screen() instanceof ChatScreen)) {
+		if (!overScreen(Minecraft.getInstance().gui.screen())) {
 			draw(graphics);
 		}
 	}
@@ -132,10 +148,9 @@ public final class UpdateToast {
 		int x = Math.round(-WIDTH + (WIDTH + MARGIN) * eased);
 		panel = new Box(x, y, WIDTH, height);
 
-		// Hover only with the chat open
 		double mouseX = -1;
 		double mouseY = -1;
-		if (client.gui.screen() instanceof ChatScreen) {
+		if (overScreen(client.gui.screen())) {
 			mouseX = client.mouseHandler.getScaledXPos(client.getWindow());
 			mouseY = client.mouseHandler.getScaledYPos(client.getWindow());
 		}

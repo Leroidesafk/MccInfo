@@ -6,10 +6,10 @@ import com.google.gson.JsonParseException;
 import leroidesafk.mccinfo.Mccinfo;
 import leroidesafk.mccinfo.client.MccIsland;
 import leroidesafk.mccinfo.client.ModConfig;
+import leroidesafk.mccinfo.client.items.GrayscaleItems;
 import leroidesafk.mccinfo.client.util.AsyncFiles;
 import net.fabricmc.fabric.api.client.message.v1.ClientReceiveMessageEvents;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.network.chat.Component;
@@ -53,8 +53,6 @@ public final class ParkourLimits {
 	private static final Pattern COURSE = Pattern.compile("Course #(\\d+)", Pattern.CASE_INSENSITIVE);
 	private static final Pattern DAILY_NUMBER = Pattern.compile("Daily Challenge #([\\d,]+)", Pattern.CASE_INSENSITIVE);
 	private static final LocalTime RESET_TIME = LocalTime.of(10, 0);
-	private static final int SLOT_SIZE = 16;
-	private static final int TINT = 0x80FF2020;
 
 	// Course or daily challenge and its reset time
 	public static final class Limit {
@@ -243,7 +241,8 @@ public final class ParkourLimits {
 		}
 	}
 
-	private static String scoreboardCourse() {
+	// Course name from the COURSE line of the sidebar
+	static String scoreboardCourse() {
 		Minecraft client = Minecraft.getInstance();
 		if (client.level == null) {
 			return null;
@@ -288,8 +287,8 @@ public final class ParkourLimits {
 		return false;
 	}
 
-	// Red tint on the slot in the Dojo menu
-	public static void extractTint(GuiGraphicsExtractor graphics, Slot slot) {
+	// Red tint on the course item in the Dojo menu
+	public static void beginTint(Slot slot) {
 		if (!enabled()) {
 			return;
 		}
@@ -297,6 +296,6 @@ public final class ParkourLimits {
 		if (screen == null || !screen.getTitle().getString().toUpperCase(Locale.ROOT).contains(DOJO_TITLE) || !reached(slot.getItem())) {
 			return;
 		}
-		graphics.fill(slot.x, slot.y, slot.x + SLOT_SIZE, slot.y + SLOT_SIZE, TINT);
+		GrayscaleItems.beginRed();
 	}
 }

@@ -56,6 +56,7 @@ public final class NeuItems {
 	// List layout
 	static final int SQUARE_SIZE = 18;
 	private static final int CELL_SIZE = 20;
+	private static final int HOVER_MARGIN = (CELL_SIZE - SQUARE_SIZE) / 2;
 	private static final int INVENTORY_GAP = 16;
 	private static final int MARGIN = 8;
 	static final int BOX_HEIGHT = 14;
@@ -77,7 +78,6 @@ public final class NeuItems {
 	private static final int GROUP_OPEN_COLOR = 0xFF8C8C8C;
 	private static final long ICON_INTERVAL_MILLIS = 1000L;
 	static final int TABS_GAP = 4;
-	// MCC click sound
 	private static final SoundEvent CLICK_SOUND = SoundEvent.createVariableRangeEvent(Identifier.parse("mcc:ui.click_normal"));
 	static final int TAB_HEIGHT = 14;
 	private static final float TAB_ICON_SCALE = 0.75F;
@@ -86,6 +86,8 @@ public final class NeuItems {
 	private static final int RECIPE_DIM_COLOR = 0xA0000000;
 	private static final ChatFormatting GROUP_COUNT_COLOR = ChatFormatting.GOLD;
 	private static final Identifier SETTINGS_MODEL = Identifier.parse("mcc:island_interface/settings/icon");
+	private static final Identifier LOCKED_FRAME = Mccinfo.id("textures/gui/recipes/selected.png");
+	private static final int LOCKED_FRAME_SIZE = 20;
 	private static ItemStack settingsIcon;
 	public static java.util.function.BooleanSupplier listedMode = () -> false;
 
@@ -180,6 +182,32 @@ public final class NeuItems {
 
 		private Box shifted(int dx) {
 			return new Box(this.left + dx, this.top, this.right + dx, this.bottom);
+		}
+
+		private boolean intersects(Box other) {
+			return this.left < other.right && other.left < this.right && this.top < other.bottom && other.top < this.bottom;
+		}
+	}
+
+	// Favorite cells around the Cosmetic Preview
+	private record FavoriteGrid(Layout layout, List<Box> cells, CosmeticPreview.Layout doll, boolean listed) {
+		private int perPage() {
+			return Math.max(1, this.cells.size());
+		}
+
+		private int pages(int count) {
+			return Math.max(1, (count + perPage() - 1) / perPage());
+		}
+
+		private int indexAt(double x, double y, int shownPage, int count) {
+			for (int i = 0; i < this.cells.size(); i++) {
+				Box cell = this.cells.get(i);
+				if (x >= cell.left() - HOVER_MARGIN && x < cell.right() + HOVER_MARGIN && y >= cell.top() - HOVER_MARGIN && y < cell.bottom() + HOVER_MARGIN) {
+					int index = shownPage * perPage() + i;
+					return index < count ? index : -1;
+				}
+			}
+			return -1;
 		}
 	}
 
@@ -354,10 +382,11 @@ public final class NeuItems {
 	private NeuItems() {
 	}
 
-	// Recipe Mode in every inventory, list in the player inventory and chests
 	public static void register() {
+		CosmeticPreview.register();
 		net.fabricmc.fabric.api.client.rendering.v1.PictureInPictureRendererRegistry.register(context -> new NpcGroupRenderer(context.minecraft().getEntityRenderDispatcher()));
 		ScreenEvents.AFTER_INIT.register((client, screen, width, height) -> {
+			// Recipe Mode in every inventory
 			if (screen instanceof AbstractContainerScreen<?>) {
 				ScreenMouseEvents.allowMouseClick(screen).register((current, event) -> !recipeClick(current, event));
 				ScreenEvents.afterForeground(screen).register((current, graphics, mouseX, mouseY, a) -> dimForRecipes(current, graphics));
@@ -383,12 +412,24 @@ public final class NeuItems {
 				refilter();
 			});
 			toggle.setTooltip(Tooltip.create(Component.translatable("screen.mccinfo.neu_items.toggle")));
+			ToggleSwitch previewToggle = new ToggleSwitch(MARGIN / 2 + ToggleSwitch.WIDTH + TABS_GAP, height - ToggleSwitch.HEIGHT - MARGIN / 2,
+					Component.empty(), () -> ModConfig.get().cosmeticPreview, value -> {
+						ModConfig.get().cosmeticPreview = value;
+						ModConfig.get().save();
+					});
+			previewToggle.setTooltip(Tooltip.create(Component.translatable("screen.mccinfo.neu_items.cosmetic_preview")));
 			Screens.getWidgets(screen).add(toggle);
+			Screens.getWidgets(screen).add(previewToggle);
 			Screens.getWidgets(screen).add(search);
 			placeWidgets(screen, toggle, search);
-			ScreenEvents.afterTick(screen).register(current -> placeWidgets(current, toggle, search));
+			previewToggle.visible = previewAllowed(screen);
+			ScreenEvents.afterTick(screen).register(current -> {
+				placeWidgets(current, toggle, search);
+				previewToggle.visible = previewAllowed(current);
+			});
 			ScreenEvents.afterForeground(screen).register((current, graphics, mouseX, mouseY, a) -> {
 				placeWidgets(current, toggle, search);
+				previewToggle.visible = previewAllowed(current);
 				extract(current, graphics, mouseX, mouseY);
 				extractSettings(graphics, search, mouseX, mouseY);
 				extractCalculation(graphics, search);
@@ -412,6 +453,9 @@ public final class NeuItems {
 				return false;
 			});
 			ScreenMouseEvents.allowMouseClick(screen).register((current, event) -> !click(current, event));
+			ScreenMouseEvents.allowMouseClick(screen).register((current, event) -> !lockSlot(current, event));
+			ScreenMouseEvents.allowMouseDrag(screen).register((current, event, dragX, dragY) -> !CosmeticPreview.drag(dragX, dragY));
+			ScreenMouseEvents.allowMouseRelease(screen).register((current, event) -> !CosmeticPreview.stopDrag());
 			ScreenKeyboardEvents.allowKeyPress(screen).register((current, event) -> {
 				if (!search.visible || !search.isFocused() || event.key() == GLFW.GLFW_KEY_ESCAPE) {
 					return true;
@@ -747,6 +791,15 @@ public final class NeuItems {
 		if (object.has("cosmetics") && object.get("cosmetics").isJsonObject()) {
 			cosmeticDefaults = object.getAsJsonObject("cosmetics");
 		}
+		if (object.has("colors") && object.get("colors").isJsonArray()) {
+			List<Integer> colors = new ArrayList<>();
+			for (JsonElement color : object.getAsJsonArray("colors")) {
+				if (color.isJsonPrimitive() && color.getAsJsonPrimitive().isNumber()) {
+					colors.add(color.getAsInt() & 0xFFFFFF);
+				}
+			}
+			CosmeticPreview.setColors(colors);
+		}
 		if (object.has("containers") && object.get("containers").isJsonArray()) {
 			CONTAINERS.clear();
 			for (JsonElement element : object.getAsJsonArray("containers")) {
@@ -887,6 +940,14 @@ public final class NeuItems {
 		return ModConfig.get().mccJei && !ITEMS.isEmpty() && MccIsland.isConnected() && Permissions.has(Permissions.Perm.SEE_ITEMS);
 	}
 
+	static boolean previewAllowed(Screen screen) {
+		return MccIsland.isConnected() && Permissions.has(Permissions.Perm.SEE_ITEMS) && eligible(screen);
+	}
+
+	static boolean previewShown(Screen screen) {
+		return CosmeticPreview.enabled() && previewAllowed(screen);
+	}
+
 	public static boolean shown() {
 		return available() && !ModConfig.get().neuItemsHidden && eligible(Minecraft.getInstance().gui.screen());
 	}
@@ -989,20 +1050,21 @@ public final class NeuItems {
 	}
 
 	private static int indexAt(Layout layout, double mouseX, double mouseY, int shownPage, int count) {
-		if (mouseX < layout.left() || mouseY < layout.gridTop()) {
+		double x = mouseX - layout.left() + HOVER_MARGIN;
+		double y = mouseY - layout.gridTop() + HOVER_MARGIN;
+		if (x < 0 || y < 0) {
 			return -1;
 		}
-		int column = (int) ((mouseX - layout.left()) / CELL_SIZE);
-		int row = (int) ((mouseY - layout.gridTop()) / CELL_SIZE);
+		int column = (int) (x / CELL_SIZE);
+		int row = (int) (y / CELL_SIZE);
 		if (column >= layout.columns() || row >= layout.rows()
-				|| mouseX - layout.left() - column * CELL_SIZE >= SQUARE_SIZE || mouseY - layout.gridTop() - row * CELL_SIZE >= SQUARE_SIZE) {
+				|| x - column * CELL_SIZE >= SQUARE_SIZE + HOVER_MARGIN * 2 || y - row * CELL_SIZE >= SQUARE_SIZE + HOVER_MARGIN * 2) {
 			return -1;
 		}
 		int index = shownPage * layout.perPage() + row * layout.columns() + column;
 		return index < count ? index : -1;
 	}
 
-	// Favorite panel, middle click to add or remove
 	private static List<Entry> favorites() {
 		List<String> ids = ModConfig.get().neuFavorites;
 		List<Entry> entries = new ArrayList<>();
@@ -1017,8 +1079,31 @@ public final class NeuItems {
 		return entries;
 	}
 
-	private static Layout favoritesLayout(Layout main) {
-		return main == null || favorites().isEmpty() ? null : main.shifted(MARGIN - main.left());
+	// Favorite panel left of the inventory
+	private static FavoriteGrid favoritesLayout(Layout main, boolean list) {
+		if (main == null) {
+			return null;
+		}
+		boolean listed = list && !favorites().isEmpty();
+		Layout layout = main.shifted(MARGIN - main.left());
+		CosmeticPreview.Layout doll = CosmeticPreview.enabled()
+				? CosmeticPreview.layout(layout.left(), layout.gridTop(), layout.left() + layout.width(), layout.gridTop() + layout.rows() * CELL_SIZE - GAP)
+				: null;
+		if (!listed && doll == null) {
+			return null;
+		}
+		List<Box> cells = new ArrayList<>();
+		for (int row = 0; row < layout.rows(); row++) {
+			for (int column = 0; column < layout.columns(); column++) {
+				int x = layout.left() + column * CELL_SIZE;
+				int y = layout.gridTop() + row * CELL_SIZE;
+				Box cell = new Box(x, y, x + SQUARE_SIZE, y + SQUARE_SIZE);
+				if (doll == null || !CosmeticPreview.reserved() || !doll.blocks(cell.left(), cell.top(), cell.right(), cell.bottom())) {
+					cells.add(cell);
+				}
+			}
+		}
+		return new FavoriteGrid(layout, cells, doll, listed);
 	}
 
 	private static void toggleFavorite(String id) {
@@ -1033,23 +1118,48 @@ public final class NeuItems {
 		clickSound();
 	}
 
-	private static boolean overFavorites(Layout layout, double mouseX, double mouseY) {
-		if (layout == null) {
+	private static boolean overFavorites(FavoriteGrid grid, double mouseX, double mouseY) {
+		if (grid == null || !grid.listed()) {
 			return false;
 		}
 		int count = favorites().size();
-		int shownPage = Math.clamp(favoritePage, 0, pages(layout, count) - 1);
-		return layout.headerContains(mouseX, mouseY) || indexAt(layout, mouseX, mouseY, shownPage, count) >= 0;
+		int shownPage = Math.clamp(favoritePage, 0, grid.pages(count) - 1);
+		return grid.layout().headerContains(mouseX, mouseY) || grid.indexAt(mouseX, mouseY, shownPage, count) >= 0;
 	}
 
-	private static boolean clickFavorites(Screen screen, Layout layout, MouseButtonEvent event) {
+	private static boolean lockClick(MouseButtonEvent event, Entry entry) {
+		return CosmeticPreview.enabled() && PrivateKeys.LOCK_COSMETIC.usable() && PrivateKeys.LOCK_COSMETIC.matchesMouse(event)
+				&& CosmeticPreview.toggleLock(entry.id, entry.stack());
+	}
+
+	// Middle Click on an inventory slot locks the cosmetic
+	private static boolean lockSlot(Screen screen, MouseButtonEvent event) {
+		if (!previewShown(screen) || !PrivateKeys.LOCK_COSMETIC.usable() || !PrivateKeys.LOCK_COSMETIC.matchesMouse(event)) {
+			return false;
+		}
+		Slot slot = ((ContainerHoveredSlotAccessor) screen).mccinfo$getHoveredSlot();
+		if (slot == null || !slot.hasItem()) {
+			return false;
+		}
+		ItemStack stack = slot.getItem();
+		return CosmeticPreview.toggleLock(CosmeticPreview.idFor(stack), stack.copy());
+	}
+
+	private static boolean favoriteClick(MouseButtonEvent event) {
+		return PrivateKeys.FAVORITE_ITEM.usable() && PrivateKeys.FAVORITE_ITEM.matchesMouse(event);
+	}
+
+	private static boolean clickFavorites(Screen screen, FavoriteGrid grid, MouseButtonEvent event) {
+		Layout layout = grid.layout();
 		List<Entry> entries = favorites();
-		int pages = pages(layout, entries.size());
+		int pages = grid.pages(entries.size());
 		favoritePage = Math.clamp(favoritePage, 0, pages - 1);
-		int index = indexAt(layout, event.x(), event.y(), favoritePage, entries.size());
+		int index = grid.indexAt(event.x(), event.y(), favoritePage, entries.size());
 		if (index >= 0) {
 			String id = entries.get(index).id;
-			if (event.button() == GLFW.GLFW_MOUSE_BUTTON_MIDDLE) {
+			if (lockClick(event, entries.get(index))) {
+				return true;
+			} else if (favoriteClick(event)) {
 				toggleFavorite(id);
 			} else if (event.button() == GLFW.GLFW_MOUSE_BUTTON_LEFT || event.button() == GLFW.GLFW_MOUSE_BUTTON_RIGHT) {
 				NeuCrafts.open(screen, id, event.button() == GLFW.GLFW_MOUSE_BUTTON_LEFT);
@@ -1066,9 +1176,9 @@ public final class NeuItems {
 
 	private static boolean scroll(Screen screen, double mouseX, double mouseY, double scrollY) {
 		Layout layout = shown() ? layout(screen) : null;
-		Layout favorites = favoritesLayout(layout);
+		FavoriteGrid favorites = favoritesLayout(layout, true);
 		if (scrollY != 0 && overFavorites(favorites, mouseX, mouseY)) {
-			int pages = pages(favorites, favorites().size());
+			int pages = favorites.pages(favorites().size());
 			int previous = favoritePage;
 			favoritePage = Math.clamp(favoritePage - (int) Math.signum(scrollY), 0, pages - 1);
 			if (favoritePage != previous) {
@@ -1087,14 +1197,18 @@ public final class NeuItems {
 		return true;
 	}
 
-	// Clicks: favorites, tabs, pages, groups and items
+	// Clicks: groups, items, categories and pages
 	private static boolean click(Screen screen, MouseButtonEvent event) {
-		Layout layout = shown() ? layout(screen) : null;
-		Layout favorites = favoritesLayout(layout);
+		boolean list = shown();
+		Layout layout = list || previewShown(screen) ? layout(screen) : null;
+		FavoriteGrid favorites = favoritesLayout(layout, list);
 		if (overFavorites(favorites, event.x(), event.y())) {
 			return clickFavorites(screen, favorites, event);
 		}
-		if (layout == null || !layout.contains(event.x(), event.y())) {
+		if (favorites != null && favorites.doll() != null && CosmeticPreview.reserved() && CosmeticPreview.click(favorites.doll(), event)) {
+			return true;
+		}
+		if (!list || layout == null || !layout.contains(event.x(), event.y())) {
 			return false;
 		}
 		int index = indexAt(layout, event.x(), event.y());
@@ -1113,7 +1227,9 @@ public final class NeuItems {
 			}
 			refilter();
 			clickSound();
-		} else if (index >= 0 && event.button() == GLFW.GLFW_MOUSE_BUTTON_MIDDLE) {
+		} else if (index >= 0 && lockClick(event, filtered.get(index).entry())) {
+			return true;
+		} else if (index >= 0 && favoriteClick(event)) {
 			toggleFavorite(filtered.get(index).entry().id);
 		} else if (index >= 0 && (event.button() == GLFW.GLFW_MOUSE_BUTTON_LEFT || event.button() == GLFW.GLFW_MOUSE_BUTTON_RIGHT)) {
 			NeuCrafts.open(screen, filtered.get(index).entry().id, event.button() == GLFW.GLFW_MOUSE_BUTTON_LEFT);
@@ -1127,6 +1243,7 @@ public final class NeuItems {
 		return true;
 	}
 
+	// MCC click sound
 	public static void clickSound() {
 		Minecraft.getInstance().getSoundManager().play(SimpleSoundInstance.forUI(CLICK_SOUND, 1.0F));
 	}
@@ -1135,7 +1252,9 @@ public final class NeuItems {
 		Layout layout = available() ? layout(screenWidth, screenHeight, inventoryRight) : null;
 		if (layout != null) {
 			extract(null, layout, graphics, mouseX, mouseY);
-			extractFavorites(null, favoritesLayout(layout), graphics, mouseX, mouseY);
+			FavoriteGrid favorites = favoritesLayout(layout, true);
+			extractFavorites(null, favorites, graphics, mouseX, mouseY);
+			extractDoll(null, favorites, graphics, mouseX, mouseY);
 		}
 	}
 
@@ -1149,22 +1268,45 @@ public final class NeuItems {
 	}
 
 	private static void extract(Screen screen, GuiGraphicsExtractor graphics, int mouseX, int mouseY) {
-		Layout layout = shown() ? layout(screen) : null;
+		boolean list = shown();
+		Layout layout = list || previewShown(screen) ? layout(screen) : null;
 		if (layout == null) {
 			return;
 		}
-		extract(screen, layout, graphics, mouseX, mouseY);
-		extractFavorites(screen, favoritesLayout(layout), graphics, mouseX, mouseY);
+		if (list) {
+			extract(screen, layout, graphics, mouseX, mouseY);
+		}
+		CosmeticPreview.updateReserved(screen);
+		FavoriteGrid favorites = favoritesLayout(layout, list);
+		extractFavorites(screen, favorites, graphics, mouseX, mouseY);
+		extractDoll(screen, favorites, graphics, mouseX, mouseY);
 	}
 
-	private static void extractFavorites(Screen screen, Layout layout, GuiGraphicsExtractor graphics, int mouseX, int mouseY) {
-		if (layout == null) {
+	// Cosmetic Preview in the favorites area
+	private static void extractDoll(Screen screen, FavoriteGrid grid, GuiGraphicsExtractor graphics, int mouseX, int mouseY) {
+		if (grid == null || grid.doll() == null) {
 			return;
 		}
+		CosmeticPreview.extract(graphics, screen, grid.doll(), mouseX, mouseY);
+	}
+
+	private static void lockedFrame(GuiGraphicsExtractor graphics, String id, int x, int y) {
+		if (CosmeticPreview.enabled() && CosmeticPreview.isLocked(id)) {
+			int offset = (LOCKED_FRAME_SIZE - SQUARE_SIZE) / 2;
+			graphics.blit(RenderPipelines.GUI_TEXTURED, LOCKED_FRAME, x - offset, y - offset, 0.0F, 0.0F, LOCKED_FRAME_SIZE, LOCKED_FRAME_SIZE,
+					LOCKED_FRAME_SIZE, LOCKED_FRAME_SIZE);
+		}
+	}
+
+	private static void extractFavorites(Screen screen, FavoriteGrid grid, GuiGraphicsExtractor graphics, int mouseX, int mouseY) {
+		if (grid == null || !grid.listed()) {
+			return;
+		}
+		Layout layout = grid.layout();
 		List<Entry> entries = favorites();
 		graphics.nextStratum();
 		Font font = Minecraft.getInstance().font;
-		int pages = pages(layout, entries.size());
+		int pages = grid.pages(entries.size());
 		favoritePage = Math.clamp(favoritePage, 0, pages - 1);
 		Component title = Component.translatable("screen.mccinfo.neu_items.favorite");
 		if (pages > 1) {
@@ -1175,12 +1317,12 @@ public final class NeuItems {
 				layout.previous().contains(mouseX, mouseY), favoritePage > 0);
 		extractBox(graphics, font, layout.next(), Component.translatable("screen.mccinfo.neu_items.next"),
 				layout.next().contains(mouseX, mouseY), favoritePage < pages - 1);
-		int hovered = indexAt(layout, mouseX, mouseY, favoritePage, entries.size());
-		int first = favoritePage * layout.perPage();
+		int hovered = grid.indexAt(mouseX, mouseY, favoritePage, entries.size());
+		int first = favoritePage * grid.perPage();
 		List<Badge> badges = new ArrayList<>();
-		for (int slot = 0; slot < layout.perPage(); slot++) {
-			int x = layout.left() + slot % layout.columns() * CELL_SIZE;
-			int y = layout.gridTop() + slot / layout.columns() * CELL_SIZE;
+		for (int slot = 0; slot < grid.cells().size(); slot++) {
+			int x = grid.cells().get(slot).left();
+			int y = grid.cells().get(slot).top();
 			int index = first + slot;
 			if (index >= entries.size()) {
 				break;
@@ -1188,6 +1330,7 @@ public final class NeuItems {
 			Entry entry = entries.get(index);
 			int background = entry.outdated ? (index == hovered ? OUTDATED_HOVER_COLOR : OUTDATED_COLOR) : (index == hovered ? HOVER_COLOR : BOX_COLOR);
 			OverlayStyle.fillRounded(graphics, x, y, SQUARE_SIZE, SQUARE_SIZE, background);
+			lockedFrame(graphics, entry.id, x, y);
 			if (entry.stack().isEmpty()) {
 				continue;
 			}
@@ -1206,6 +1349,7 @@ public final class NeuItems {
 				graphics.setTooltipForNextFrame(font, stack, mouseX, mouseY);
 				hoveredStack = stack;
 				hoveredAt = System.currentTimeMillis();
+				CosmeticPreview.hover(stack);
 			}
 		}
 		if ((hovered >= 0 && NeuCrafts.hasCrafts(entries.get(hovered).id)) || (layout.previous().contains(mouseX, mouseY) && favoritePage > 0)
@@ -1213,14 +1357,14 @@ public final class NeuItems {
 			pointer(graphics);
 		}
 		ItemStack carried = screen instanceof AbstractContainerScreen<?> container ? container.getMenu().getCarried() : ItemStack.EMPTY;
-		if (!carried.isEmpty() && overFavorites(layout, mouseX, mouseY)) {
+		if (!carried.isEmpty() && overFavorites(grid, mouseX, mouseY)) {
 			graphics.nextStratum();
 			graphics.item(carried, mouseX - 8, mouseY - 8);
 			graphics.itemDecorations(font, carried, mouseX - 8, mouseY - 8);
 		}
 	}
 
-	// Tabs, grid, pages and the hovered tooltip
+	// Tabs, grid, pages
 	private static void extract(Screen screen, Layout layout, GuiGraphicsExtractor graphics, int mouseX, int mouseY) {
 		graphics.nextStratum();
 		Font font = Minecraft.getInstance().font;
@@ -1249,6 +1393,9 @@ public final class NeuItems {
 			boolean outdated = tile != null && tile.outdated();
 			int background = outdated ? (index == hovered ? OUTDATED_HOVER_COLOR : OUTDATED_COLOR) : (index == hovered ? HOVER_COLOR : BOX_COLOR);
 			OverlayStyle.fillRounded(graphics, x, y, SQUARE_SIZE, SQUARE_SIZE, background);
+			if (tile != null && !tile.isGroup()) {
+				lockedFrame(graphics, tile.entry().id, x, y);
+			}
 			if (tile != null) {
 				boolean open = tile.isGroup() && expanded(tile.group());
 				if (tile.isGroup() && tile.group().variants()) {
@@ -1292,10 +1439,12 @@ public final class NeuItems {
 				graphics.setTooltipForNextFrame(font, stack, mouseX, mouseY);
 				hoveredStack = stack;
 				hoveredAt = System.currentTimeMillis();
+				CosmeticPreview.hover(stack);
 			}
 		}
 		if (hoveredGroup != null) {
 			groupTooltip(graphics, font, hoveredGroup, mouseX, mouseY);
+			CosmeticPreview.hover(hoveredGroup.icon());
 		}
 		if (hoveredGroup != null || (hovered >= 0 && NeuCrafts.hasCrafts(filtered.get(hovered).entry().id)) || (hoveredTab != null && hoveredTab != category)
 				|| (layout.previous().contains(mouseX, mouseY) && page > 0) || (layout.next().contains(mouseX, mouseY) && page < pages - 1)) {

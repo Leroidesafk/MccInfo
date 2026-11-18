@@ -48,9 +48,11 @@ public final class CraftScreen extends ContainerScreen {
 	private static final int NPC_ARROW_WIDTH = 14;
 	private static final int NPC_LABEL_PADDING = 2;
 	private static final int NPC_LABEL_CAPS = 7;
+	// No longer available box
 	private static final int UNAVAILABLE_PADDING = 4;
 	private static final int UNAVAILABLE_LINE = 10;
 	private static final int UNAVAILABLE_GAP = 3;
+	private static final int UNAVAILABLE_HUD_HEIGHT = 45;
 	// Path to the NPC
 	private static final int NPC_PATH_COLOR = 0xFFAA00;
 	private static final Identifier NPC_WAYPOINT_ICON = Mccinfo.id("textures/gui/recipes/vendor.png");
@@ -410,7 +412,6 @@ public final class CraftScreen extends ContainerScreen {
 		return this.topPos + (this.imageHeight - PLAYER_INVENTORY_HEIGHT - RESULT_SIZE) / 2;
 	}
 
-	// No longer available box in place of the NPCs
 	private String unavailable() {
 		NeuCrafts.Craft craft = this.crafts.get(this.index);
 		NeuCrafts.Layout layout = craft.result() != null ? null : NeuCrafts.layout(craft);
@@ -447,25 +448,29 @@ public final class CraftScreen extends ContainerScreen {
 		return npcTop() + NPC_HEIGHT + NeuItems.GAP;
 	}
 
-	// Text shrunk to fit the box
+	// Reason box under the menu, above the HUD
 	private void extractUnavailable(GuiGraphicsExtractor graphics, String reason) {
 		Component title = Component.translatable("screen.mccinfo.npc.unavailable").withStyle(net.minecraft.ChatFormatting.RED);
 		Component text = reason.isBlank() ? Component.translatable("screen.mccinfo.npc.unavailable.default") : Component.literal(reason);
-		int inner = NPC_WIDTH - UNAVAILABLE_PADDING * 2;
+		int width = this.imageWidth;
+		int inner = width - UNAVAILABLE_PADDING * 2;
 		List<net.minecraft.util.FormattedCharSequence> titleLines = this.font.split(title, inner);
 		List<net.minecraft.util.FormattedCharSequence> lines = this.font.split(text.copy().withStyle(net.minecraft.ChatFormatting.GRAY), inner);
 		int height = UNAVAILABLE_PADDING * 2 + (titleLines.size() + lines.size()) * UNAVAILABLE_LINE + UNAVAILABLE_GAP;
-		int left = npcLeft();
-		int top = this.topPos + (this.imageHeight - PLAYER_INVENTORY_HEIGHT - height) / 2;
-		OverlayStyle.fillRounded(graphics, left, top, NPC_WIDTH, height, NeuItems.BOX_COLOR);
+		int left = this.leftPos;
+		List<Tab> tabs = tabs();
+		int above = (tabs.isEmpty() ? this.topPos + this.imageHeight - PLAYER_INVENTORY_HEIGHT + BOTTOM_OVERHANG : tabs.getLast().top() + NeuItems.TAB_HEIGHT)
+				+ NeuItems.TABS_GAP;
+		int top = Math.max(above, above + (this.height - UNAVAILABLE_HUD_HEIGHT - above - height) / 2);
+		OverlayStyle.fillRounded(graphics, left, top, width, height, NeuItems.BOX_COLOR);
 		int y = top + UNAVAILABLE_PADDING;
 		for (net.minecraft.util.FormattedCharSequence line : titleLines) {
-			graphics.text(this.font, line, left + (NPC_WIDTH - this.font.width(line)) / 2, y, 0xFFFFFFFF, true);
+			graphics.text(this.font, line, left + (width - this.font.width(line)) / 2, y, 0xFFFFFFFF, true);
 			y += UNAVAILABLE_LINE;
 		}
 		y += UNAVAILABLE_GAP;
 		for (net.minecraft.util.FormattedCharSequence line : lines) {
-			graphics.text(this.font, line, left + (NPC_WIDTH - this.font.width(line)) / 2, y, 0xFFFFFFFF, true);
+			graphics.text(this.font, line, left + (width - this.font.width(line)) / 2, y, 0xFFFFFFFF, true);
 			y += UNAVAILABLE_LINE;
 		}
 	}
@@ -521,8 +526,9 @@ public final class CraftScreen extends ContainerScreen {
 		return sideLeft(NPC_WIDTH);
 	}
 
+	// Right of the menu, before the Mcc JEI
 	private int sideLeft(int width) {
-		return this.leftPos - RESULT_GAP - width;
+		return this.leftPos + this.imageWidth + RESULT_GAP;
 	}
 
 	private int npcTop() {
@@ -650,6 +656,7 @@ public final class CraftScreen extends ContainerScreen {
 			NeuItems.extractBox(graphics, this.font, right - width, top, right, bottom,
 					Component.translatable("screen.mccinfo.neu_items.next"), onNext(mouseX, mouseY), this.index < this.crafts.size() - 1);
 		}
+		// No longer available box in place of the NPCs
 		String unavailable = unavailable();
 		if (unavailable != null) {
 			extractUnavailable(graphics, unavailable);

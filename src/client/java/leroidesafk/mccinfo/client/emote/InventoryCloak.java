@@ -21,8 +21,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.WeakHashMap;
 
-// Backpack on the player in the inventory preview
-public final class InventoryBackpack {
+// Cloak on the player in the inventory preview
+public final class InventoryCloak {
 	private static final int FULL_BRIGHT = 15728880;
 	private static final Map<EntityRenderState, List<Attached>> ATTACHED = Collections.synchronizedMap(new WeakHashMap<>());
 
@@ -30,13 +30,13 @@ public final class InventoryBackpack {
 	private record Attached(EntityRenderState state, Vector3f offset, Matrix4f motion) {
 	}
 
-	private InventoryBackpack() {
+	private InventoryCloak() {
 	}
 
 	// Armor stands riding the player, turned with its body
 	public static void attach(EntityRenderState playerState, LivingEntity entity) {
 		ATTACHED.remove(playerState);
-		if (!ModConfig.get().showInventoryBackpack || !(entity instanceof Player) || !(playerState instanceof LivingEntityRenderState living)) {
+		if (!ModConfig.get().showInventoryCloak || !(entity instanceof Player) || !(playerState instanceof LivingEntityRenderState living)) {
 			return;
 		}
 		float delta = living.bodyRot - entity.yBodyRot;

@@ -1,6 +1,8 @@
 package leroidesafk.mccinfo.client.fishing;
 
+import leroidesafk.mccinfo.client.ModConfig;
 import leroidesafk.mccinfo.client.chat.MccApi;
+import leroidesafk.mccinfo.client.items.SlotIndicators;
 import leroidesafk.mccinfo.client.relay.Permissions;
 import leroidesafk.mccinfo.client.util.ContainerWatch;
 import com.google.gson.Gson;
@@ -12,8 +14,6 @@ import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.screens.inventory.ContainerScreen;
-import net.minecraft.client.renderer.RenderPipelines;
-import net.minecraft.resources.Identifier;
 import net.minecraft.world.Container;
 import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.item.ItemStack;
@@ -39,6 +39,7 @@ public final class FishCollection {
 		public final String letter = name().substring(0, 1);
 	}
 
+	// Rarities and their color (make them global in the futureclaude)
 	public enum Rarity {
 		COMMON(0xFFFFFF),
 		UNCOMMON(0x1EFF00),
@@ -54,10 +55,12 @@ public final class FishCollection {
 		}
 	}
 
+	// When the fish can be caught
 	public enum Time {
 		DAY, NIGHT, ELUSIVE
 	}
 
+	// State of the collection shown in the menu
 	public enum Status { NO_KEY, LOADING, HIDDEN, FAILED, READY }
 
 	// Fish list sent by the relay
@@ -77,16 +80,16 @@ public final class FishCollection {
 
 	private static final Gson GSON = new Gson();
 
+	// Fish Collection menu, recognized by the name of its 9th item
 	private static final int TITLE_SLOT = 8;
 	private static final String TITLE_NAME = "fish collection";
+	// API refresh delays: in the background, when opening the screen and after joining
 	private static final long REFRESH_MILLIS = 5 * 60_000L;
 	private static final long OPEN_REFRESH_MILLIS = 30_000L;
 	private static final long JOIN_MILLIS = 60_000L;
 
-	private static final Identifier CHECK_ICON = Mccinfo.id("textures/gui/check.png");
-	private static final int CHECK_ICON_SIZE = 8;
-	private static final int SLOT_SIZE = 16;
 
+	// Relay list, by name, and its islands and crab climates
 	private static List<Fish> FISH = List.of();
 	private static Map<String, Fish> BY_NAME = Map.of();
 	private static Set<String> ISLANDS = Set.of();
@@ -96,9 +99,11 @@ public final class FishCollection {
 	private static Map<String, Integer> CAUGHT = Map.of();
 	private static Map<String, Map<String, Integer>> TROPHIES = Map.of();
 
+	// Fish Collection menu currently open
 	private static final ContainerWatch WATCH = new ContainerWatch();
 	private static Container openCollection;
 
+	// API request in progress and its answer
 	private static Status status = Status.NO_KEY;
 	private static boolean loading;
 	private static long lastRequest;
@@ -107,6 +112,7 @@ public final class FishCollection {
 	private FishCollection() {
 	}
 
+	// Ticks, Fish Collection key and refresh after joining
 	public static void register() {
 		ClientTickEvents.END_CLIENT_TICK.register(FishCollection::tick);
 		ClientTickEvents.END_CLIENT_TICK.register(client -> {
@@ -120,10 +126,12 @@ public final class FishCollection {
 		MccApi.onBatch(FishCollection::join);
 	}
 
+	// Needs the utils permission
 	static boolean allowed() {
 		return Permissions.has(Permissions.Perm.UTILS);
 	}
 
+	// Refresh after joining, at most once a minute
 	private static void join() {
 		if (!allowed()) {
 			return;
@@ -133,6 +141,7 @@ public final class FishCollection {
 		}
 	}
 
+	// Fish list from the relay
 	public static void receive(JsonObject object) {
 		if (!object.has("fish") || !object.get("fish").isJsonArray()) {
 			return;
@@ -163,6 +172,7 @@ public final class FishCollection {
 		WATCH.reset();
 	}
 
+	// Data for the Fish Collection screen
 	static Set<String> islands() {
 		return ISLANDS;
 	}
@@ -179,6 +189,7 @@ public final class FishCollection {
 		return loading && status != Status.READY ? Status.LOADING : status;
 	}
 
+	// Caught weights, one bit per weight
 	static boolean isCaught(Fish fish, Weight weight) {
 		return (CAUGHT.getOrDefault(fish.name(), 0) & weight.bit) != 0;
 	}
@@ -187,6 +198,7 @@ public final class FishCollection {
 		return (CAUGHT.getOrDefault(fish.name(), 0) & fish.allWeights()) == fish.allWeights();
 	}
 
+	// Caught and total weights of the whole collection
 	static int caughtCount() {
 		int count = 0;
 		for (Fish fish : FISH) {
@@ -203,6 +215,7 @@ public final class FishCollection {
 		return count;
 	}
 
+	// Opening the screen refreshes after 30 seconds
 	static void refreshOnOpen() {
 		if (!allowed()) {
 			return;
@@ -212,6 +225,7 @@ public final class FishCollection {
 		}
 	}
 
+	// Without a valid key the records are forgotten
 	private static void tick(Minecraft client) {
 		if (!allowed()) {
 			openCollection = null;
@@ -237,6 +251,7 @@ public final class FishCollection {
 		}
 	}
 
+	// Asks the API for the caught weights and trophies
 	private static void refresh() {
 		if (loading) {
 			return;
@@ -268,6 +283,7 @@ public final class FishCollection {
 		}));
 	}
 
+	// API records turned into weight bits and trophies
 	private static void applyRecords() {
 		Map<String, Integer> caught = new HashMap<>();
 		Map<String, Map<String, Integer>> trophies = new HashMap<>();
@@ -289,6 +305,7 @@ public final class FishCollection {
 		TROPHIES = Map.copyOf(trophies);
 	}
 
+	// Trophies of a weight, then of a whole fish
 	static int trophies(Fish fish, Weight weight) {
 		return TROPHIES.getOrDefault(fish.name(), Map.of()).getOrDefault(weight.name(), 0);
 	}
@@ -326,7 +343,7 @@ public final class FishCollection {
 
 	// Check icon on fish with every weight caught
 	public static void extractCheckIcon(GuiGraphicsExtractor graphics, Slot slot) {
-		if (!allowed()) {
+		if (!allowed() || !ModConfig.get().fishCheckIcon) {
 			return;
 		}
 		if (openCollection == null || slot.container != openCollection) {
@@ -335,11 +352,11 @@ public final class FishCollection {
 		ItemStack stack = slot.getItem();
 		Fish fish = stack.isEmpty() ? null : BY_NAME.get(name(stack));
 		if (fish != null && isComplete(fish)) {
-			graphics.blit(RenderPipelines.GUI_TEXTURED, CHECK_ICON, slot.x + SLOT_SIZE - CHECK_ICON_SIZE, slot.y + SLOT_SIZE - CHECK_ICON_SIZE, 0.0F, 0.0F,
-					CHECK_ICON_SIZE, CHECK_ICON_SIZE, CHECK_ICON_SIZE, CHECK_ICON_SIZE);
+			SlotIndicators.check(graphics, slot);
 		}
 	}
 
+	// Lowercase item name
 	private static String name(ItemStack stack) {
 		return stack.getHoverName().getString().trim().toLowerCase(Locale.ROOT);
 	}

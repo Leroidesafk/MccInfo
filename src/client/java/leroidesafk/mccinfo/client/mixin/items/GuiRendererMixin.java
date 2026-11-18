@@ -11,10 +11,10 @@ import org.spongepowered.asm.mixin.injection.At;
 
 @Mixin(GuiRenderer.class)
 public class GuiRendererMixin {
-	// Grey pipeline for marked items
+	// Grey or red pipeline for marked items
 	@ModifyExpressionValue(method = "submitBlitFromItemAtlas", at = @At(value = "FIELD",
 			target = "Lnet/minecraft/client/renderer/RenderPipelines;GUI_TEXTURED_PREMULTIPLIED_ALPHA:Lcom/mojang/blaze3d/pipeline/RenderPipeline;"))
 	private RenderPipeline mccinfo$grayscale(RenderPipeline original, @Local(argsOnly = true) GuiItemRenderState itemState) {
-		return GrayscaleItems.isMarked(itemState) ? GrayscaleItems.PIPELINE : original;
+		return GrayscaleItems.pipeline(itemState, original);
 	}
 }

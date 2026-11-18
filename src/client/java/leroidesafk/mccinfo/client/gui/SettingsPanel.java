@@ -80,7 +80,7 @@ public final class SettingsPanel {
 	private static final float KNOB_MILLIS = 120.0F;
 	private static final float FADE_MILLIS = 150.0F;
 	private static final float REVEAL_MILLIS = 220.0F;
-	// Page icons, numbered line by line in icons.png
+	private static final float INFO_SLIDE_MILLIS = 260.0F;
 	private static final Identifier ICONS = Mccinfo.id("textures/gui/ui/icons.png");
 	private static final int ICONS_SIZE = 40;
 	private static final int ICON = 8;
@@ -98,6 +98,7 @@ public final class SettingsPanel {
 	static final int ICON_VOICE = 10;
 	static final int ICON_WIDGETS = 14;
 	static final int ICON_API_TOKEN = 15;
+	static final int ICON_PARKOUR = 19;
 	static final int NO_ICON = -1;
 	// Cards, controls, search and scroll layout
 	private static final int ICON_GAP = 4;
@@ -208,7 +209,10 @@ public final class SettingsPanel {
 	record IconButton(Identifier sprite, boolean sheet, BooleanSupplier state, BooleanSupplier active, Supplier<Component> tooltip, Runnable run) implements Control {
 	}
 
-	record Dropdown(Supplier<Component> label, int width, List<Component> choices, IntConsumer select) implements Control {
+	record Dropdown(Supplier<Component> label, int width, List<Component> choices, IntConsumer select, List<Component> tooltips) implements Control {
+		Dropdown(Supplier<Component> label, int width, List<Component> choices, IntConsumer select) {
+			this(label, width, choices, select, null);
+		}
 	}
 
 	record Slider(double min, DoubleSupplier max, double step, DoubleSupplier value, DoubleConsumer set, Runnable save, DoubleFunction<Component> label,
@@ -266,13 +270,6 @@ public final class SettingsPanel {
 	}
 
 	private record OpenDropdown(Dropdown dropdown, int x, int y, int width) {
-		private int indexAt(double mouseX, double mouseY) {
-			if (mouseX < this.x || mouseX >= this.x + this.width || mouseY < this.y) {
-				return -1;
-			}
-			int index = (int) ((mouseY - this.y) / CHOICE_HEIGHT);
-			return index < this.dropdown.choices().size() ? index : -1;
-		}
 	}
 
 	private final Supplier<List<List<Page>>> groups;
@@ -320,8 +317,16 @@ public final class SettingsPanel {
 	private final Map<String, List<String>> cardOrders = new HashMap<>();
 	private List<String> sectionOrder = List.of();
 	private OpenDropdown dropdown;
+	private OpenDropdown scrolledDropdown;
+	private int dropdownScroll;
 	private EditBox search;
 
+	// Settings Info box and its slide
+	private final SettingsInfoBox infoBox = new SettingsInfoBox();
+	private boolean infoShown;
+	private float infoProgress = -1.0F;
+	private long infoFrame;
+	private int screenWidth;
 	private int left;
 	private int top;
 	private int right;
@@ -362,16 +367,11 @@ public final class SettingsPanel {
 	}
 
 	EditBox init(int screenWidth, int top, int height) {
-		int width = width(screenWidth);
-		this.left = (screenWidth - width) / 2;
-		this.right = this.left + width;
+		this.screenWidth = screenWidth;
 		this.top = top;
 		this.bottom = top + height;
 		this.dropdown = null;
-		int sidebarWidth = Math.clamp(width * 29 / 100, MIN_SIDEBAR, MAX_SIDEBAR);
-		this.sidebarRight = this.left + BORDER + sidebarWidth;
-		this.contentLeft = this.sidebarRight + DIVIDER;
-		this.viewportTop = this.top + BORDER + TOP_BAR;
+		place();
 		int searchX = this.contentLeft + CONTENT_PADDING;
 		int searchY = this.top + BORDER + (TOP_BAR - SEARCH_HEIGHT) / 2;
 		int searchWidth = Math.min(SEARCH_WIDTH, this.right - BORDER - CONTENT_PADDING - searchX);
@@ -389,6 +389,37 @@ public final class SettingsPanel {
 			this.dropdown = null;
 		});
 		return this.search;
+	}
+
+	// Menu and Settings Info box, centered together
+	private void place() {
+		if (this.infoProgress < 0.0F) {
+			this.infoProgress = SettingsInfo.enabled() ? 1.0F : 0.0F;
+		}
+		this.infoShown = this.infoProgress > 0.0F;
+		float t = eased(this.infoProgress);
+		int available = this.screenWidth - 16;
+		int infoWidth = Math.clamp(available * 28 / 100, SettingsInfoBox.MIN_WIDTH, SettingsInfoBox.MAX_WIDTH);
+		int alone = width(this.screenWidth);
+		int beside = Math.min(MAX_WIDTH, available - SettingsInfoBox.GAP - infoWidth);
+		int width = Math.round(alone + (beside - alone) * t);
+		this.left = (this.screenWidth - width - Math.round((SettingsInfoBox.GAP + infoWidth) * t)) / 2;
+		this.right = this.left + width;
+		int sidebarWidth = Math.clamp(width * 29 / 100, MIN_SIDEBAR, MAX_SIDEBAR);
+		this.sidebarRight = this.left + BORDER + sidebarWidth;
+		this.contentLeft = this.sidebarRight + DIVIDER;
+		this.viewportTop = this.top + BORDER + TOP_BAR;
+		if (this.infoShown) {
+			int boxLeft = Math.round(this.right - infoWidth + (infoWidth + SettingsInfoBox.GAP) * t);
+			this.infoBox.bounds(boxLeft, this.top, boxLeft + infoWidth, this.bottom);
+			this.infoBox.alpha(t);
+		}
+		if (this.search != null) {
+			int searchX = this.contentLeft + CONTENT_PADDING;
+			int searchWidth = Math.min(SEARCH_WIDTH, this.right - BORDER - CONTENT_PADDING - searchX);
+			this.search.setX(searchX + SEARCH_ICON);
+			this.search.setWidth(searchWidth - SEARCH_ICON - 4);
+		}
 	}
 
 	// Hover fade, 150 ms
@@ -418,6 +449,19 @@ public final class SettingsPanel {
 	}
 
 	void extractBackground(GuiGraphicsExtractor graphics) {
+		// Settings Info slide
+		long now = Util.getMillis();
+		long elapsed = this.infoFrame == 0 ? 0 : now - this.infoFrame;
+		this.infoFrame = now;
+		float target = SettingsInfo.enabled() ? 1.0F : 0.0F;
+		if (this.infoProgress != target) {
+			float step = elapsed / INFO_SLIDE_MILLIS;
+			this.infoProgress = target > this.infoProgress ? Math.min(target, this.infoProgress + step) : Math.max(target, this.infoProgress - step);
+			place();
+		}
+		if (this.infoShown) {
+			this.infoBox.extractBackground(graphics);
+		}
 		graphics.fill(this.left, this.top, this.right, this.bottom, COLOR_OUTLINE);
 		graphics.fill(this.left, this.top, this.right, this.viewportTop, COLOR_OUTLINE_HEADER);
 		graphics.fill(this.left + BORDER, this.top, this.sidebarRight, this.viewportTop, COLOR_HEADER);
@@ -454,8 +498,9 @@ public final class SettingsPanel {
 		if (pages.stream().noneMatch(page -> page.id().equals(this.selected))) {
 			this.selected = pages.isEmpty() ? null : pages.getFirst().id();
 		}
-		int hoverX = this.dropdown != null ? Integer.MIN_VALUE : mouseX;
-		int hoverY = this.dropdown != null ? Integer.MIN_VALUE : mouseY;
+		boolean blocked = this.dropdown != null || this.infoBox.previewOpen();
+		int hoverX = blocked ? Integer.MIN_VALUE : mouseX;
+		int hoverY = blocked ? Integer.MIN_VALUE : mouseY;
 		extractSidebar(graphics, groups, hoverX, hoverY);
 		// Bottom of the left column: Admin or Moderator, Api Key above it
 		int y = this.bottom - BORDER - SIDEBAR_GAP - SIDEBAR_LINE;
@@ -467,11 +512,21 @@ public final class SettingsPanel {
 			extractSidebarRow(graphics, bottomPage, y, hoverX, hoverY);
 		}
 		extractContent(graphics, pages, hoverX, hoverY);
+		if (this.infoShown) {
+			graphics.enableScissor(this.right, this.top, this.screenWidth, this.bottom);
+			this.infoBox.extract(graphics, hoverX, hoverY);
+			graphics.disableScissor();
+		}
 		if (this.dropdown != null) {
 			extractDropdown(graphics, mouseX, mouseY);
 		}
 		if (this.tooltip != null) {
 			MenuTooltip.extract(graphics, this.tooltip, this.tooltipX, this.tooltipY, uiScale());
+		}
+		// Enlarged picture over everything
+		if (this.infoBox.previewOpen()) {
+			var window = Minecraft.getInstance().getWindow();
+			this.infoBox.extractPreview(graphics, (int) (window.getGuiScaledWidth() / uiScale()), (int) (window.getGuiScaledHeight() / uiScale()));
 		}
 	}
 
@@ -1060,6 +1115,10 @@ public final class SettingsPanel {
 	}
 
 	private void extractCard(GuiGraphicsExtractor graphics, Card card, Layout layout, int x, int y, int width, int height, int mouseX, int mouseY) {
+		// Hovered card shown in the Settings Info box
+		if (this.infoShown && hovered(x, y, width, height, mouseX, mouseY)) {
+			this.infoBox.show(card);
+		}
 		graphics.fill(x, y, x + width, y + height, card.warning() ? COLOR_WARNING_BORDER : COLOR_CARD_BORDER);
 		graphics.fill(x + 1, y + 1, x + width - 1, y + height - 1, COLOR_CARD);
 		int textX = x + CARD_PADDING;
@@ -1283,22 +1342,55 @@ public final class SettingsPanel {
 		}
 	}
 
-	// Open dropdown list over everything
+	// Open dropdown list over everything, scrolls when too long
 	private void extractDropdown(GuiGraphicsExtractor graphics, int mouseX, int mouseY) {
 		OpenDropdown open = this.dropdown;
+		if (open != this.scrolledDropdown) {
+			this.scrolledDropdown = open;
+			this.dropdownScroll = 0;
+		}
 		List<Component> choices = open.dropdown().choices();
-		int height = choices.size() * CHOICE_HEIGHT;
+		int rows = dropdownRows(open);
+		this.dropdownScroll = Math.clamp(this.dropdownScroll, 0, choices.size() - rows);
+		int height = rows * CHOICE_HEIGHT;
 		graphics.fill(open.x(), open.y(), open.x() + open.width(), open.y() + height + 1, COLOR_CARD_BORDER);
-		int hovered = open.indexAt(mouseX, mouseY);
-		for (int i = 0; i < choices.size(); i++) {
-			int y = open.y() + i * CHOICE_HEIGHT;
+		int hovered = dropdownIndex(mouseX, mouseY);
+		for (int row = 0; row < rows; row++) {
+			int i = row + this.dropdownScroll;
+			int y = open.y() + row * CHOICE_HEIGHT;
 			float fade = fade("choice:" + i, i == hovered);
 			graphics.fill(open.x() + 1, y, open.x() + open.width() - 1, y + CHOICE_HEIGHT, mix(COLOR_DROPDOWN, COLOR_CONTROL_HOVER, fade));
 			graphics.text(this.font, choices.get(i), open.x() + CHOICE_PADDING, y + (CHOICE_HEIGHT - this.font.lineHeight) / 2 + 1, mix(COLOR_TEXT, COLOR_WHITE, fade), true);
 		}
+		if (rows < choices.size()) {
+			int thumb = Math.max(CHOICE_HEIGHT / 2, height * rows / choices.size());
+			int thumbY = open.y() + (height - thumb) * this.dropdownScroll / (choices.size() - rows);
+			int thumbX = open.x() + open.width() - 2;
+			graphics.fill(thumbX, thumbY, thumbX + 1, thumbY + thumb, COLOR_DESCRIPTION);
+		}
 		if (hovered >= 0) {
 			NeuItems.pointer(graphics);
+			List<Component> tooltips = open.dropdown().tooltips();
+			if (tooltips != null && hovered < tooltips.size() && tooltips.get(hovered) != null) {
+				this.tooltip = tooltips.get(hovered);
+				this.tooltipX = mouseX;
+				this.tooltipY = mouseY;
+			}
 		}
+	}
+
+	private int dropdownRows(OpenDropdown open) {
+		return Math.min(open.dropdown().choices().size(), Math.max(1, (this.bottom - BORDER - open.y()) / CHOICE_HEIGHT));
+	}
+
+	private int dropdownIndex(double mouseX, double mouseY) {
+		OpenDropdown open = this.dropdown;
+		if (open == null || mouseX < open.x() || mouseX >= open.x() + open.width() || mouseY < open.y()
+				|| mouseY >= open.y() + dropdownRows(open) * CHOICE_HEIGHT) {
+			return -1;
+		}
+		int index = (int) ((mouseY - open.y()) / CHOICE_HEIGHT) + this.dropdownScroll;
+		return index < open.dropdown().choices().size() ? index : -1;
 	}
 
 	private void addHit(int x, int y, int width, int height, Runnable action) {
@@ -1337,6 +1429,9 @@ public final class SettingsPanel {
 	}
 
 	boolean closeDropdown() {
+		if (this.infoBox.closePreview()) {
+			return true;
+		}
 		if (this.dropdown == null) {
 			return false;
 		}
@@ -1344,15 +1439,22 @@ public final class SettingsPanel {
 		return true;
 	}
 
-	// Clicks: open dropdown first, then scrollbar, then the hit areas
+	// Clicks: picture, dropdown, Settings Info box, scrollbar, then the hit areas
 	boolean mouseClicked(double mouseX, double mouseY) {
+		if (this.infoBox.previewOpen()) {
+			this.infoBox.closePreview();
+			return true;
+		}
 		if (this.dropdown != null) {
-			int index = this.dropdown.indexAt(mouseX, mouseY);
+			int index = dropdownIndex(mouseX, mouseY);
 			if (index >= 0) {
 				NeuItems.clickSound();
 				this.dropdown.dropdown().select().accept(index);
 			}
 			this.dropdown = null;
+			return true;
+		}
+		if (this.infoShown && this.infoBox.click(mouseX, mouseY)) {
 			return true;
 		}
 		if (overScrollbar(mouseX, mouseY)) {
@@ -1398,6 +1500,17 @@ public final class SettingsPanel {
 	}
 
 	boolean mouseScrolled(double mouseX, double mouseY, double scrollY) {
+		if (this.infoBox.previewOpen()) {
+			return true;
+		}
+		if (this.dropdown != null) {
+			int rows = dropdownRows(this.dropdown);
+			int size = this.dropdown.dropdown().choices().size();
+			if (rows < size) {
+				this.dropdownScroll = Math.clamp(this.dropdownScroll - (int) Math.signum(scrollY), 0, size - rows);
+				return true;
+			}
+		}
 		if (this.dropdown == null && this.draggedSlider == null) {
 			for (SliderHit hit : this.sliderHits) {
 				if (hit.contains(mouseX, mouseY)) {
@@ -1411,6 +1524,9 @@ public final class SettingsPanel {
 					return true;
 				}
 			}
+		}
+		if (this.dropdown == null && this.infoShown && this.infoBox.scroll(mouseX, mouseY, scrollY)) {
+			return true;
 		}
 		if (mouseX < this.contentLeft || mouseX >= this.right || mouseY < this.viewportTop || mouseY >= this.bottom || this.maxScroll == 0) {
 			return false;

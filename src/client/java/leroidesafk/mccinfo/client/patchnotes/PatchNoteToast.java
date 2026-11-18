@@ -9,11 +9,13 @@ import leroidesafk.mccinfo.client.update.UpdateToast;
 import leroidesafk.mccinfo.Mccinfo;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents;
 import net.fabricmc.fabric.api.client.rendering.v1.hud.HudElementRegistry;
+import net.fabricmc.fabric.api.client.screen.v1.ScreenEvents;
+import net.fabricmc.fabric.api.client.screen.v1.ScreenMouseEvents;
 import net.minecraft.client.DeltaTracker;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
-import net.minecraft.client.gui.screens.ChatScreen;
+import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
 import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.network.chat.Component;
 import net.minecraft.util.FormattedCharSequence;
@@ -58,8 +60,15 @@ public final class PatchNoteToast {
 	private PatchNoteToast() {
 	}
 
+	// HUD, and over inventories and chests
 	public static void register() {
 		HudElementRegistry.addLast(Mccinfo.id("patch_note_toast"), PatchNoteToast::extract);
+		ScreenEvents.AFTER_INIT.register((client, screen, width, height) -> {
+			if (screen instanceof AbstractContainerScreen<?>) {
+				ScreenEvents.afterForeground(screen).register((current, graphics, mouseX, mouseY, a) -> extractOverChat(graphics));
+				ScreenMouseEvents.allowMouseClick(screen).register((current, event) -> !mouseClicked(event));
+			}
+		});
 		// Already shown: not again on the next join
 		ClientPlayConnectionEvents.DISCONNECT.register((handler, client) -> {
 			if (recorded) {
@@ -83,8 +92,9 @@ public final class PatchNoteToast {
 				&& (preview || !Permissions.isOutdated() && !UpdateToast.wanted(client));
 	}
 
+	// HUD drawing, unless a screen draws it
 	private static void extract(GuiGraphicsExtractor graphics, DeltaTracker deltaTracker) {
-		if (!(Minecraft.getInstance().gui.screen() instanceof ChatScreen)) {
+		if (!UpdateToast.overScreen(Minecraft.getInstance().gui.screen())) {
 			draw(graphics);
 		}
 	}
@@ -138,7 +148,7 @@ public final class PatchNoteToast {
 
 		double mouseX = -1;
 		double mouseY = -1;
-		if (client.gui.screen() instanceof ChatScreen) {
+		if (UpdateToast.overScreen(client.gui.screen())) {
 			mouseX = client.mouseHandler.getScaledXPos(client.getWindow());
 			mouseY = client.mouseHandler.getScaledYPos(client.getWindow());
 		}

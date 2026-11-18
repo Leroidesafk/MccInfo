@@ -213,10 +213,31 @@
       "ascent": 7,
       "height": 9,
       "chars": [
-        "\ue110",
-        "\ue111",
-        "\ue112",
-        "\ue113"
+        "",
+        "",
+        "",
+        ""
+      ]
+    },
+    {
+      "type": "bitmap",
+      "file": "mccinfo:gui/ui/mid_click.png",
+      "ascent": 7,
+      "height": 8,
+      "chars": [
+        ""
+      ]
+    },
+    {
+      "type": "bitmap",
+      "file": "mccinfo:gui/ui/infos.png",
+      "ascent": 7,
+      "height": 8,
+      "chars": [
+        "",
+        "",
+        "",
+        ""
       ]
     }
   ]

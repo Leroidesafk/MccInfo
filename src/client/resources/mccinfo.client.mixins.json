@@ -13,7 +13,12 @@
 		"gui.TabDotsGlyphMixin",
 		"accessor.ClientMannequinAccessor",
 		"accessor.ContainerHoveredSlotAccessor",
+		"accessor.LivingEntityEquipmentAccessor",
+		"items.CosmeticBackLayerMixin",
+		"parkour.ParkourPacketMixin",
+		"parkour.ParkourMedalGlyphMixin",
 		"items.ContainerSlotIconMixin",
+		"items.ContainerSlotBlockMixin",
 		"spots.DisplayGlowColorMixin",
 		"items.EffectsInInventoryMixin",
 		"accessor.GuiGraphicsExtractorAccessor",
@@ -57,8 +62,8 @@
 		"emote.SoundBufferLibraryMixin",
 		"emote.PlayerModelEmoteMixin",
 		"emote.ArmorStandEmoteMixin",
-		"emote.InventoryBackpackMixin",
-		"emote.GuiEntityBackpackMixin"
+		"emote.InventoryCloakMixin",
+		"emote.GuiEntityCloakMixin"
 	],
 	"injectors": {
 		"defaultRequire": 1

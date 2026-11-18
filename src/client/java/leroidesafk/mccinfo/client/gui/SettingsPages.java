@@ -5,6 +5,7 @@ import leroidesafk.mccinfo.client.PrivateKeys;
 import leroidesafk.mccinfo.client.chat.MccApi;
 import leroidesafk.mccinfo.client.chat.ModChat;
 import leroidesafk.mccinfo.client.fishing.FishCollectionScreen;
+import leroidesafk.mccinfo.client.parkour.ParkourSplits;
 import leroidesafk.mccinfo.client.relay.ModUsers;
 import leroidesafk.mccinfo.client.relay.Permissions;
 import leroidesafk.mccinfo.client.relay.SpotSync;
@@ -20,6 +21,7 @@ import net.minecraft.ChatFormatting;
 import net.minecraft.SharedConstants;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.components.EditBox;
+import net.minecraft.client.gui.screens.ConfirmScreen;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.FontDescription;
@@ -36,13 +38,19 @@ import java.util.function.Function;
 import java.util.function.Supplier;
 
 public final class SettingsPages {
+	// Minimum width of the key and Open buttons
 	static final int KEY_WIDTH = 70;
+	// Range of the Show Improvement From slider
+	private static final int IMPROVEMENT_MIN = -10;
+	private static final int IMPROVEMENT_MAX = 10;
+	// Room for the chevron of a dropdown
 	private static final int DROPDOWN_EXTRA = 20;
 
 	// Cards and sections added by optional modules
 	private static final java.util.Map<String, List<java.util.function.Supplier<List<SettingsPanel.Card>>>> EXTRA_CARDS = new java.util.HashMap<>();
 	private static final java.util.Map<String, List<java.util.function.Supplier<List<SettingsPanel.Section>>>> EXTRA_SECTIONS = new java.util.HashMap<>();
 
+	// Menu screen, parent of the screens opened from it
 	private final Screen screen;
 	// Key waiting for a new binding
 	private PrivateKeys.Key listening;
@@ -65,14 +73,17 @@ public final class SettingsPages {
 		boolean submit(EditBox box);
 	}
 
+	// Admin page given by the private module
 	private static FooterPage footerPage;
 
+	// Cards of the General section of the Keybinds page
 	private static final List<Supplier<SettingsPanel.Card>> GENERAL_CARDS = new ArrayList<>();
 
 	static void addGeneralCard(Supplier<SettingsPanel.Card> card) {
 		GENERAL_CARDS.add(card);
 	}
 
+	// Text fields of the private module and what Enter does in them
 	private static final List<Supplier<List<EditBox>>> EXTRA_INPUTS = new ArrayList<>();
 	private static final List<java.util.function.Predicate<EditBox>> EXTRA_SUBMITS = new ArrayList<>();
 
@@ -94,6 +105,7 @@ public final class SettingsPages {
 		return page;
 	}
 
+	// Text fields of the bottom pages
 	List<EditBox> footerInputs() {
 		List<EditBox> inputs = new ArrayList<>();
 		inputs.add(tokenBox());
@@ -106,6 +118,7 @@ public final class SettingsPages {
 		return inputs;
 	}
 
+	// Enter in a text field
 	boolean submitFooter(EditBox box) {
 		if (box == this.tokenBox) {
 			saveToken();
@@ -147,6 +160,7 @@ public final class SettingsPages {
 		return this.tokenBox;
 	}
 
+	// Saves the key and checks it with the API
 	private void saveToken() {
 		ModConfig config = ModConfig.get();
 		config.apiToken = tokenBox().getValue().strip();
@@ -188,6 +202,7 @@ public final class SettingsPages {
 		return this.screen;
 	}
 
+	// Message when the relay is unreachable
 	static void offline() {
 		if (Minecraft.getInstance().player != null) {
 			Minecraft.getInstance().player.sendOverlayMessage(Component.translatable("message.mccinfo.mccinfo.offline").withStyle(ChatFormatting.RED));
@@ -204,8 +219,11 @@ public final class SettingsPages {
 			utils.add(fishing());
 		}
 		List<SettingsPanel.Section> utilsExtra = extraSections("utils");
-		if (Permissions.has(Permissions.Perm.UTILS) || !utilsExtra.isEmpty()) {
+		if (Permissions.has(Permissions.Perm.UTILS) || !utilsExtra.isEmpty() || !extraCards("utils.exchange").isEmpty()) {
 			utils.add(utils(utilsExtra));
+		}
+		if (Permissions.has(Permissions.Perm.UTILS)) {
+			utils.add(parkour());
 		}
 		if (Permissions.has(Permissions.Perm.VOICE_CHAT)) {
 			utils.add(voiceChat());
@@ -217,6 +235,7 @@ public final class SettingsPages {
 		return List.of(utils, events);
 	}
 
+	// Key binding in progress
 	boolean listening() {
 		return this.listening != null || this.listeningPtt;
 	}
@@ -241,6 +260,7 @@ public final class SettingsPages {
 		this.listeningPtt = false;
 	}
 
+	// Shortcuts for the cards
 	static Component text(String key) {
 		return Component.translatable(key);
 	}
@@ -286,6 +306,7 @@ public final class SettingsPages {
 			"voice_chat", new PageInfo(SettingsPanel.ICON_VOICE, "screen.mccinfo.settings.voice_chat"),
 			"fishing", new PageInfo(SettingsPanel.ICON_FISHING, "screen.mccinfo.events.fishing"));
 
+	// Key card, with a link to the page of the key when listed
 	SettingsPanel.Card keyCard(PrivateKeys.Key key) {
 		return keyCard(key, false);
 	}
@@ -302,6 +323,7 @@ public final class SettingsPages {
 		return SettingsPanel.Card.of("key_" + key.id, text(key.translationKey), Component.empty(), link, bind);
 	}
 
+	// Key name, or the held modifiers while waiting for a key
 	private Component keyLabel(PrivateKeys.Key key) {
 		if (key != this.listening) {
 			return key.displayName();
@@ -311,7 +333,7 @@ public final class SettingsPages {
 		return Component.literal("> ").append(name.copy().withStyle(ChatFormatting.YELLOW)).append(" <");
 	}
 
-	// Utils page: badges, navigation, display, transitions and chat
+	// Utils page: badges, navigation, display, transitions, chat and exchange
 	private SettingsPanel.Page utils(List<SettingsPanel.Section> extra) {
 		ModConfig config = ModConfig.get();
 		boolean utilsPerm = Permissions.has(Permissions.Perm.UTILS);
@@ -330,6 +352,7 @@ public final class SettingsPages {
 						config.save();
 					})));
 		}
+		// Chat Ping, emojis and MccInfo chat
 		List<SettingsPanel.Card> chat = new ArrayList<>();
 		if (utilsPerm) chat.add(SettingsPanel.Card.of("chat_ping", text("screen.mccinfo.settings.chat_ping"),
 				text("screen.mccinfo.settings.chat_ping.description"),
@@ -408,17 +431,18 @@ public final class SettingsPages {
 						})));
 			}
 		}
+		// Display: cloak, Tab list, item icons, Mcc JEI and Quest Lock
 		List<SettingsPanel.Card> display = new ArrayList<>();
-		display.add(SettingsPanel.Card.of("hide_first_person_backpack", text("screen.mccinfo.settings.hide_first_person_backpack"),
-				text("screen.mccinfo.settings.hide_first_person_backpack.description"),
-				toggle(() -> config.hideFirstPersonBackpack, value -> {
-					config.hideFirstPersonBackpack = value;
+		display.add(SettingsPanel.Card.of("hide_first_person_cloak", text("screen.mccinfo.settings.hide_first_person_cloak"),
+				text("screen.mccinfo.settings.hide_first_person_cloak.description"),
+				toggle(() -> config.hideFirstPersonCloak, value -> {
+					config.hideFirstPersonCloak = value;
 					config.save();
 				})));
-		display.add(SettingsPanel.Card.of("show_inventory_backpack", text("screen.mccinfo.settings.show_inventory_backpack"),
-				text("screen.mccinfo.settings.show_inventory_backpack.description"),
-				toggle(() -> config.showInventoryBackpack, value -> {
-					config.showInventoryBackpack = value;
+		display.add(SettingsPanel.Card.of("show_inventory_cloak", text("screen.mccinfo.settings.show_inventory_cloak"),
+				text("screen.mccinfo.settings.show_inventory_cloak.description"),
+				toggle(() -> config.showInventoryCloak, value -> {
+					config.showInventoryCloak = value;
 					config.save();
 				})));
 		display.add(SettingsPanel.Card.of("hide_tab_dots", text("screen.mccinfo.settings.hide_tab_dots"),
@@ -427,16 +451,46 @@ public final class SettingsPages {
 					config.hideTabDots = value;
 					config.save();
 				})));
-		display.add(SettingsPanel.Card.of("parkour_limit_tint", text("screen.mccinfo.settings.parkour_limit_tint"),
-				text("screen.mccinfo.settings.parkour_limit_tint.description"),
-				toggle(() -> config.parkourLimitTint, value -> {
-					config.parkourLimitTint = value;
+		if (utilsPerm) display.add(SettingsPanel.Card.of("not_owned_icon", text("screen.mccinfo.settings.not_owned_icon"),
+				text("screen.mccinfo.settings.not_owned_icon.description"),
+				toggle(() -> config.notOwnedIcon, value -> {
+					config.notOwnedIcon = value;
+					config.save();
+				})));
+		if (utilsPerm) display.add(SettingsPanel.Card.of("missing_materials_icon", text("screen.mccinfo.settings.missing_materials_icon"),
+				text("screen.mccinfo.settings.missing_materials_icon.description"),
+				toggle(() -> config.missingMaterialsIcon, value -> {
+					config.missingMaterialsIcon = value;
+					config.save();
+				})));
+		if (utilsPerm) display.add(SettingsPanel.Card.of("maxed_cosmetic_icon", text("screen.mccinfo.settings.maxed_cosmetic_icon"),
+				text("screen.mccinfo.settings.maxed_cosmetic_icon.description"),
+				toggle(() -> config.maxedCosmeticIcon, value -> {
+					config.maxedCosmeticIcon = value;
+					config.save();
+				})));
+		if (utilsPerm) display.add(SettingsPanel.Card.of("locked_perk_icon", text("screen.mccinfo.settings.locked_perk_icon"),
+				text("screen.mccinfo.settings.locked_perk_icon.description"),
+				toggle(() -> config.lockedPerkIcon, value -> {
+					config.lockedPerkIcon = value;
+					config.save();
+				})));
+		if (utilsPerm) display.add(SettingsPanel.Card.of("completed_collection_icon", text("screen.mccinfo.settings.completed_collection_icon"),
+				text("screen.mccinfo.settings.completed_collection_icon.description"),
+				toggle(() -> config.completedCollectionIcon, value -> {
+					config.completedCollectionIcon = value;
 					config.save();
 				})));
 		if (utilsPerm) display.add(SettingsPanel.Card.of("mcc_jei", text("screen.mccinfo.settings.mcc_jei"),
 				text("screen.mccinfo.settings.mcc_jei.description"),
 				toggle(() -> config.mccJei, value -> {
 					config.mccJei = value;
+					config.save();
+				})));
+		if (utilsPerm) display.add(SettingsPanel.Card.of("cosmetic_preview", text("screen.mccinfo.settings.cosmetic_preview"),
+				text("screen.mccinfo.settings.cosmetic_preview.description"),
+				toggle(() -> config.cosmeticPreview, value -> {
+					config.cosmeticPreview = value;
 					config.save();
 				})));
 		if (utilsPerm) {
@@ -446,8 +500,14 @@ public final class SettingsPages {
 						config.seeModBadges = value;
 						config.save();
 					})));
+			display.add(SettingsPanel.Card.of("quest_lock", text("screen.mccinfo.settings.quest_lock"), text("screen.mccinfo.settings.quest_lock.description"),
+					toggle(() -> config.questLock, value -> {
+						config.questLock = value;
+						config.save();
+					})));
 		}
 		List<SettingsPanel.Card> navigation = extraCards("utils.navigation");
+		// Badges need a valid API key
 		List<SettingsPanel.Card> badges = new ArrayList<>();
 		MccApi.KeyState keyState = MccApi.state();
 		if (keyState == MccApi.KeyState.NONE || keyState == MccApi.KeyState.INVALID) {
@@ -460,17 +520,48 @@ public final class SettingsPages {
 		}
 		List<SettingsPanel.Section> sections = new ArrayList<>();
 		if (utilsPerm) {
+			// Settings Info at the top
+			sections.add(new SettingsPanel.Section(text("screen.mccinfo.settings.section.menu"), List.of(SettingsPanel.Card.of("settings_info",
+					text("screen.mccinfo.settings.settings_info"), text("screen.mccinfo.settings.settings_info.description"),
+					toggle(() -> config.settingsInfo, value -> {
+						config.settingsInfo = value;
+						config.save();
+					})))));
 			sections.add(new SettingsPanel.Section(text("screen.mccinfo.settings.section.badges"), badges));
 			sections.add(new SettingsPanel.Section(text("screen.mccinfo.settings.section.navigation"), navigation));
 			sections.add(new SettingsPanel.Section(text("screen.mccinfo.settings.section.display"), display));
 			sections.add(new SettingsPanel.Section(text("screen.mccinfo.settings.section.transitions"), transitions));
 			sections.add(new SettingsPanel.Section(text("screen.mccinfo.settings.section.chat"), chat));
 		}
+		// Island Exchange, also needs a key
+		List<SettingsPanel.Card> exchange = new ArrayList<>();
+		if (utilsPerm) {
+			exchange.add(keyState == MccApi.KeyState.NONE || keyState == MccApi.KeyState.INVALID
+					? SettingsPanel.Card.warning("exchange_lowest_price", text("screen.mccinfo.settings.exchange_lowest_price"),
+							text("screen.mccinfo.settings.exchange_lowest_price.no_key"))
+					: SettingsPanel.Card.of("exchange_lowest_price", text("screen.mccinfo.settings.exchange_lowest_price"),
+							text("screen.mccinfo.settings.exchange_lowest_price.description"),
+							toggle(() -> config.exchangeLowestPrice, value -> {
+								config.exchangeLowestPrice = value;
+								config.save();
+							})));
+			// Tax Calculator, no key needed
+			exchange.add(SettingsPanel.Card.of("exchange_tax", text("screen.mccinfo.settings.exchange_tax"),
+					text("screen.mccinfo.settings.exchange_tax.description"),
+					toggle(() -> config.exchangeTaxCalculator, value -> {
+						config.exchangeTaxCalculator = value;
+						config.save();
+					})));
+		}
+		exchange.addAll(extraCards("utils.exchange"));
+		if (!exchange.isEmpty()) {
+			sections.add(new SettingsPanel.Section(text("screen.mccinfo.settings.section.exchange"), exchange));
+		}
 		sections.addAll(extra);
 		return new SettingsPanel.Page("utils", text("screen.mccinfo.settings.utils"), SettingsPanel.ICON_UTILS, sections);
 	}
 
-	// Widgets page
+	// Badge popularity notifications
 	private List<SettingsPanel.Card> badgeNotifyCards(ModConfig config) {
 		List<SettingsPanel.Card> cards = new ArrayList<>();
 		cards.add(SettingsPanel.Card.of("badge_notify", text("screen.mccinfo.settings.badge_notify"), text("screen.mccinfo.settings.badge_notify.description"),
@@ -517,6 +608,7 @@ public final class SettingsPages {
 		return cards;
 	}
 
+	// snake_case key to Title Case
 	private static String words(String key) {
 		StringBuilder text = new StringBuilder();
 		for (String word : key.split("_")) {
@@ -527,6 +619,73 @@ public final class SettingsPages {
 		return text.toString();
 	}
 
+	// Parkour page: splits and XP limit
+	private SettingsPanel.Page parkour() {
+		ModConfig config = ModConfig.get();
+		List<SettingsPanel.Card> splits = new ArrayList<>();
+		splits.add(SettingsPanel.Card.of("parkour_splits", text("screen.mccinfo.settings.parkour_splits"),
+				text("screen.mccinfo.settings.parkour_splits.description"),
+				toggle(() -> config.parkourSplits, value -> {
+					config.parkourSplits = value;
+					config.save();
+				})));
+		splits.add(SettingsPanel.Card.of("parkour_split_timer", text("screen.mccinfo.settings.parkour_split_timer"),
+				text("screen.mccinfo.settings.parkour_split_timer.description"),
+				toggle(() -> config.parkourSplitTimer, value -> {
+					config.parkourSplitTimer = value;
+					config.save();
+				})));
+		splits.add(SettingsPanel.Card.of("parkour_split_chat", text("screen.mccinfo.settings.parkour_split_chat"),
+				text("screen.mccinfo.settings.parkour_split_chat.description"),
+				toggle(() -> config.parkourSplitChat, value -> {
+					config.parkourSplitChat = value;
+					config.save();
+				})));
+		splits.add(SettingsPanel.Card.of("parkour_split_improvements", text("screen.mccinfo.settings.parkour_split_improvements"),
+				text("screen.mccinfo.settings.parkour_split_improvements.description"),
+				toggle(() -> config.parkourSplitImprovements, value -> {
+					config.parkourSplitImprovements = value;
+					config.save();
+				})));
+		splits.add(SettingsPanel.Card.of("parkour_improvement_at", text("screen.mccinfo.settings.parkour_improvement_at"),
+				text("screen.mccinfo.settings.parkour_improvement_at.description"),
+				new SettingsPanel.Slider(IMPROVEMENT_MIN, () -> IMPROVEMENT_MAX, 1, () -> config.parkourImprovementAt,
+						value -> config.parkourImprovementAt = (int) Math.round(value), config::save,
+						value -> Component.literal(Math.round(value) + "s"), () -> true, null, null)));
+		splits.add(SettingsPanel.Card.of("parkour_split_mode", text("screen.mccinfo.settings.parkour_split_mode"),
+				text("screen.mccinfo.settings.parkour_split_mode.description"),
+				dropdown(() -> text(config.parkourSplitAverage ? "screen.mccinfo.settings.parkour_split_mode.average" : "screen.mccinfo.settings.parkour_split_mode.best"),
+						List.of(false, true),
+						average -> text(average ? "screen.mccinfo.settings.parkour_split_mode.average" : "screen.mccinfo.settings.parkour_split_mode.best"),
+						average -> {
+							config.parkourSplitAverage = average;
+							config.save();
+						})));
+		splits.add(SettingsPanel.Card.of("parkour_clear_splits", text("screen.mccinfo.settings.parkour_clear_splits"),
+				text("screen.mccinfo.settings.parkour_clear_splits.description"),
+				new SettingsPanel.Action(() -> text("screen.mccinfo.settings.parkour_clear_splits.button"), KEY_WIDTH, () -> {
+					Minecraft client = Minecraft.getInstance();
+					Screen parent = client.gui.screen();
+					client.gui.setScreen(new ConfirmScreen(confirmed -> {
+						if (confirmed) {
+							ParkourSplits.clear();
+						}
+						client.gui.setScreen(parent);
+					}, text("screen.mccinfo.settings.parkour_clear_splits.confirm").copy().withStyle(ChatFormatting.RED),
+							text("screen.mccinfo.settings.parkour_clear_splits.confirm_message")));
+				})));
+		List<SettingsPanel.Card> limit = List.of(SettingsPanel.Card.of("parkour_limit_tint", text("screen.mccinfo.settings.parkour_limit_tint"),
+				text("screen.mccinfo.settings.parkour_limit_tint.description"),
+				toggle(() -> config.parkourLimitTint, value -> {
+					config.parkourLimitTint = value;
+					config.save();
+				})));
+		return new SettingsPanel.Page("parkour", text("screen.mccinfo.settings.parkour"), SettingsPanel.ICON_PARKOUR, List.of(
+				new SettingsPanel.Section(text("screen.mccinfo.settings.section.parkour_splits"), splits),
+				new SettingsPanel.Section(text("screen.mccinfo.settings.section.parkour_limit"), limit)));
+	}
+
+	// Widgets page
 	private SettingsPanel.Page widgets() {
 		ModConfig config = ModConfig.get();
 		List<SettingsPanel.Card> cards = List.of(
@@ -553,6 +712,7 @@ public final class SettingsPages {
 				new SettingsPanel.Section(text("screen.mccinfo.settings.widgets"), cards)));
 	}
 
+	// Simple Voice Chat icons and download page
 	private static final Identifier SVC_MICROPHONE = Identifier.fromNamespaceAndPath("voicechat", "icons/microphone_button");
 	private static final Identifier SVC_SPEAKER = Identifier.fromNamespaceAndPath("voicechat", "icons/speaker_button");
 	private static final Identifier SVC_VOLUMES = Identifier.fromNamespaceAndPath("voicechat", "icons/adjust_volumes");
@@ -631,6 +791,7 @@ public final class SettingsPages {
 		return new SettingsPanel.Page("voice_chat", text("screen.mccinfo.settings.voice_chat"), SettingsPanel.ICON_VOICE, sections);
 	}
 
+	// Audio types of Simple Voice Chat
 	private static final List<Integer> AUDIO_TYPES = List.of(VoiceSettings.AUDIO_NORMAL, VoiceSettings.AUDIO_REDUCED, VoiceSettings.AUDIO_OFF);
 	private static final String[] AUDIO_TYPE_KEYS = {"normal", "reduced", "off"};
 
@@ -703,11 +864,13 @@ public final class SettingsPages {
 		return cards;
 	}
 
+	// Push to talk key, between > < while waiting
 	private Component pttLabel() {
 		Component name = VoiceSettings.pttKeyName();
 		return this.listeningPtt ? Component.literal("> ").append(name.copy().withStyle(ChatFormatting.YELLOW)).append(" <") : name;
 	}
 
+	// Names of the dropdown choices
 	private static Component activationName(boolean voice) {
 		return text(voice ? "screen.mccinfo.settings.voice_activation.voice" : "screen.mccinfo.settings.voice_activation.ptt");
 	}
@@ -716,11 +879,13 @@ public final class SettingsPages {
 		return text("screen.mccinfo.settings.voice_audio_type." + AUDIO_TYPE_KEYS[Math.clamp(type, 0, AUDIO_TYPE_KEYS.length - 1)]);
 	}
 
+	// Selected device, or the default one
 	private static Component deviceDescription(String device) {
 		Component name = device == null || device.isEmpty() ? text("screen.mccinfo.devices.default") : Component.literal(VoiceSettings.deviceName(device));
 		return Component.translatable("screen.mccinfo.settings.voice_device.description", name);
 	}
 
+	// Microphone or speaker list
 	private static void openDevices(boolean microphone) {
 		Minecraft client = Minecraft.getInstance();
 		client.gui.setScreen(new VoiceDeviceScreen(client.gui.screen(), microphone));
@@ -759,6 +924,12 @@ public final class SettingsPages {
 			collection.add(SettingsPanel.Card.of("best_island_icon", text("screen.mccinfo.settings.best_island_icon"),
 					text("screen.mccinfo.settings.best_island_icon.description"),
 					toggle(() -> config.bestIslandIcon, value -> config.bestIslandIcon = value)));
+			collection.add(SettingsPanel.Card.of("fish_check_icon", text("screen.mccinfo.settings.fish_check_icon"),
+					text("screen.mccinfo.settings.fish_check_icon.description"),
+					toggle(() -> config.fishCheckIcon, value -> config.fishCheckIcon = value)));
+			collection.add(SettingsPanel.Card.of("perk_upgrade_icon", text("screen.mccinfo.settings.perk_upgrade_icon"),
+					text("screen.mccinfo.settings.perk_upgrade_icon.description"),
+					toggle(() -> config.perkUpgradeIcon, value -> config.perkUpgradeIcon = value)));
 		}
 
 		List<SettingsPanel.Section> sections = new ArrayList<>();
@@ -798,6 +969,7 @@ public final class SettingsPages {
 								toggle(() -> config.summerHearts, value -> config.summerHearts = value))))));
 	}
 
+	// Channels of the MccInfo chat box and notifications
 	private static final List<String> BOX_CHANNELS = List.of("mccinfo", "mod", "both");
 
 	private static Component boxChannelName(String channel) {
@@ -818,11 +990,13 @@ public final class SettingsPages {
 		return dropdown(label, values, name, select, width + DROPDOWN_EXTRA);
 	}
 
+	// Dropdown with a given width
 	static <T> SettingsPanel.Dropdown dropdown(java.util.function.Supplier<Component> label, List<T> values, Function<T, Component> name,
 			java.util.function.Consumer<T> select, int width) {
 		return new SettingsPanel.Dropdown(label, width, values.stream().map(name).toList(), index -> select.accept(values.get(index)));
 	}
 
+	// Cards and sections of the private module, by slot
 	static void addCards(String slot, java.util.function.Supplier<List<SettingsPanel.Card>> cards) {
 		EXTRA_CARDS.computeIfAbsent(slot, key -> new ArrayList<>()).add(cards);
 	}
@@ -831,6 +1005,7 @@ public final class SettingsPages {
 		EXTRA_SECTIONS.computeIfAbsent(page, key -> new ArrayList<>()).add(sections);
 	}
 
+	// Everything added to a slot
 	private static List<SettingsPanel.Card> extraCards(String slot) {
 		List<SettingsPanel.Card> cards = new ArrayList<>();
 		for (java.util.function.Supplier<List<SettingsPanel.Card>> supplier : EXTRA_CARDS.getOrDefault(slot, List.of())) {

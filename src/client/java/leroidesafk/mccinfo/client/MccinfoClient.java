@@ -27,6 +27,7 @@ import leroidesafk.mccinfo.client.util.AsyncFiles;
 import leroidesafk.mccinfo.client.voice.VoiceChat;
 import net.fabricmc.api.ClientModInitializer;
 
+// Client entry point: registers every feature
 public class MccinfoClient implements ClientModInitializer {
 	@Override
 	public void onInitializeClient() {
@@ -34,6 +35,7 @@ public class MccinfoClient implements ClientModInitializer {
 		LegacyMigration.run();
 		// Features
 		AsyncFiles.register();
+		// Reserved keys before the features that read them
 		PrivateKeys.register();
 		Permissions.register();
 		FishOrderTooltipHandler.register();
@@ -63,7 +65,12 @@ public class MccinfoClient implements ClientModInitializer {
 		FishCollection.register();
 		leroidesafk.mccinfo.client.badges.Badges.register();
 		BestIsland.register();
+		leroidesafk.mccinfo.client.items.ExchangeDeals.register();
+		leroidesafk.mccinfo.client.items.ExchangeTax.register();
 		leroidesafk.mccinfo.client.parkour.ParkourLimits.register();
+		leroidesafk.mccinfo.client.parkour.ParkourSplits.register();
+		leroidesafk.mccinfo.client.quests.QuestLock.register();
+		leroidesafk.mccinfo.client.quests.QuestLockBar.register();
 		EventsScreen.register();
 		OverlayChatDrag.register();
 		// Optional modules last

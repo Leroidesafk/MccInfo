@@ -12,11 +12,10 @@ import org.spongepowered.asm.mixin.injection.At;
 
 @Mixin(PictureInPictureRenderer.class)
 public class PictureInPictureRendererMixin {
-	// Grey pipeline for big marked items too
+	// Grey or red pipeline for marked oversized items
 	@ModifyExpressionValue(method = "blitTexture", at = @At(value = "FIELD",
 			target = "Lnet/minecraft/client/renderer/RenderPipelines;GUI_TEXTURED_PREMULTIPLIED_ALPHA:Lcom/mojang/blaze3d/pipeline/RenderPipeline;"))
 	private RenderPipeline mccinfo$grayscale(RenderPipeline original, @Local(argsOnly = true) PictureInPictureRenderState renderState) {
-		return renderState instanceof OversizedItemRenderState oversized && GrayscaleItems.isMarked(oversized.guiItemRenderState())
-				? GrayscaleItems.PIPELINE : original;
+		return renderState instanceof OversizedItemRenderState oversized ? GrayscaleItems.pipeline(oversized.guiItemRenderState(), original) : original;
 	}
 }

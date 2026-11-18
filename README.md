@@ -96,6 +96,11 @@ Without automatic updates, the toast opens a download link instead (https only),
 ## Credits
 
 - [Essential](https://github.com/SparkUniverse/Essential-Mod) and [Island Utils](https://github.com/AsoDesu/IslandUtils), whose menu and interface style MccInfo follows to keep a consistent UI with the mods players already use.
+- [Island Utils](https://github.com/AsoDesu/IslandUtils) (MIT License): the Parkour Warrior Dojo splits (module timer, best and average times) are adapted from its splits module.
 
 > [!NOTE]
 > MccInfo is not affiliated with, endorsed by or associated with The Noxcrew or Mojang.
+
+## License
+
+Copyright (c) 2026 Leroidesafk. All Rights Reserved. See [LICENSE](LICENSE).

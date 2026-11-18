@@ -5,6 +5,7 @@ import leroidesafk.mccinfo.client.util.AsyncFiles;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonParseException;
+import com.google.gson.annotations.SerializedName;
 import leroidesafk.mccinfo.Mccinfo;
 import net.fabricmc.loader.api.FabricLoader;
 
@@ -26,12 +27,14 @@ public final class ModConfig {
 	public static final Path DIRECTORY = FabricLoader.getInstance().getConfigDir().resolve(Mccinfo.MOD_ID);
 	private static final Path PATH = file("config.json");
 
+	// File of the config folder
 	public static Path file(String name) {
 		return DIRECTORY.resolve(name);
 	}
 
 	private static ModConfig instance;
 
+	// Command button of the inventory
 	public record InventoryButton(int slot, String command, String background, String iconType, String icon) {
 	}
 
@@ -51,16 +54,34 @@ public final class ModConfig {
 	public boolean fishingMessages;
 	public boolean fishingMessagesFishingOnly;
 	public boolean compactFishingMessages;
+	// Icons on items and slots
 	public boolean bestIslandIcon = true;
+	public boolean fishCheckIcon = true;
+	public boolean perkUpgradeIcon = true;
+	public boolean notOwnedIcon = true;
+	public boolean missingMaterialsIcon = true;
+	public boolean maxedCosmeticIcon = true;
+	public boolean lockedPerkIcon = true;
+	public boolean completedCollectionIcon = true;
+	// Island Exchange and Settings Info
+	public boolean exchangeLowestPrice = true;
+	public boolean exchangeTaxCalculator = true;
+	public boolean settingsInfo = true;
+	// Badge popularity notifications
 	public boolean badgeNotify;
 	public String badgeNotifyMode = "suggested";
 	public Set<String> badgeNotifyGames = new HashSet<>();
 	public String badgeNotifyPopularity = "high";
 	public boolean badgeNotifySound = true;
+	// Item list, recipes and Cosmetic Preview
 	public boolean neuItemsHidden;
 	public boolean mccJei = true;
+	public boolean cosmeticPreview = true;
+	// Badges of the MccInfo users
 	public boolean seeModBadges = true;
+	// Noxcrew API key
 	public String apiToken = "";
+	// Item list columns and favorites
 	public int neuColumns;
 	public List<String> neuFavorites = new ArrayList<>();
 	// Fishing messages box
@@ -95,6 +116,7 @@ public final class ModConfig {
 	public Set<String> lockedIslands = new HashSet<>();
 	public Set<String> collapsedSections = new HashSet<>();
 	public List<InventoryButton> inventoryButtons = new ArrayList<>();
+	// Last patch note shown and black transition
 	public String lastPatchNote;
 	public boolean wipeToBlack;
 	// Chat and voice settings
@@ -137,10 +159,24 @@ public final class ModConfig {
 	public List<List<String>> widgetWheels;
 	public Set<String> widgetSeen;
 	public boolean emoteSounds = true;
-	public boolean hideFirstPersonBackpack = true;
-	public boolean showInventoryBackpack;
+	// Cloak and Tab list
+	@SerializedName(value = "hideFirstPersonCloak", alternate = "hideFirstPersonBackpack")
+	public boolean hideFirstPersonCloak = true;
+	@SerializedName(value = "showInventoryCloak", alternate = "showInventoryBackpack")
+	public boolean showInventoryCloak;
 	public boolean hideTabDots = true;
+	// Parkour Warrior
 	public boolean parkourLimitTint = true;
+	public boolean parkourSplits = true;
+	public boolean parkourSplitTimer = true;
+	public boolean parkourSplitChat = true;
+	public boolean parkourSplitImprovements = true;
+	public int parkourImprovementAt = -3;
+	public boolean parkourSplitAverage;
+	// Quest Lock: locked games and tasks
+	public boolean questLock = true;
+	public Set<String> questLockGames = new HashSet<>();
+	public Set<String> questLockTasks = new HashSet<>();
 
 	// Voice chat notice already shown
 	public boolean voiceDisclaimerSeen;
@@ -148,6 +184,7 @@ public final class ModConfig {
 	private ModConfig() {
 	}
 
+	// Loaded on first use
 	public static ModConfig get() {
 		if (instance == null) {
 			instance = load();
@@ -155,6 +192,7 @@ public final class ModConfig {
 		return instance;
 	}
 
+	// Default values when missing or unreadable
 	private static ModConfig load() {
 		if (Files.exists(PATH)) {
 			try {
@@ -174,15 +212,21 @@ public final class ModConfig {
 						loaded.lineBonuses = new HashMap<>();
 					}
 					if (loaded.badgeNotifyGames == null) {
-					loaded.badgeNotifyGames = new HashSet<>();
-				}
-				if (loaded.badgeNotifyMode == null) {
-					loaded.badgeNotifyMode = "suggested";
-				}
-				if (loaded.badgeNotifyPopularity == null) {
-					loaded.badgeNotifyPopularity = "high";
-				}
-				if (loaded.lockedIslands == null) {
+						loaded.badgeNotifyGames = new HashSet<>();
+					}
+					if (loaded.questLockGames == null) {
+						loaded.questLockGames = new HashSet<>();
+					}
+					if (loaded.questLockTasks == null) {
+						loaded.questLockTasks = new HashSet<>();
+					}
+					if (loaded.badgeNotifyMode == null) {
+						loaded.badgeNotifyMode = "suggested";
+					}
+					if (loaded.badgeNotifyPopularity == null) {
+						loaded.badgeNotifyPopularity = "high";
+					}
+					if (loaded.lockedIslands == null) {
 						loaded.lockedIslands = new HashSet<>();
 					}
 					if (loaded.tickets == null) {
@@ -235,6 +279,7 @@ public final class ModConfig {
 		}
 	}
 
+	// Written in the background
 	public void save() {
 		AsyncFiles.write(PATH, GSON.toJson(this));
 	}

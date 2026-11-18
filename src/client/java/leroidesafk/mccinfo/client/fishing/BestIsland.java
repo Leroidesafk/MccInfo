@@ -2,8 +2,8 @@ package leroidesafk.mccinfo.client.fishing;
 
 import leroidesafk.mccinfo.client.ModConfig;
 import leroidesafk.mccinfo.client.items.ItemIcons;
+import leroidesafk.mccinfo.client.items.SlotIndicators;
 import leroidesafk.mccinfo.client.util.ContainerWatch;
-import leroidesafk.mccinfo.Mccinfo;
 import leroidesafk.mccinfo.client.mixin.accessor.BossHealthOverlayAccessor;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.item.v1.ItemTooltipCallback;
@@ -12,10 +12,8 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.LerpingBossEvent;
 import net.minecraft.client.gui.screens.inventory.ContainerScreen;
-import net.minecraft.client.renderer.RenderPipelines;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.network.chat.Component;
-import net.minecraft.resources.Identifier;
 import net.minecraft.world.Container;
 import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.item.ItemStack;
@@ -81,6 +79,7 @@ public final class BestIsland {
 	private static final int DAY_END = 20 * 60 + 30;
 	private static final int TIME_TICKS = 20;
 
+	// Grottos have no day and night
 	private static final Set<String> GROTTO_ISLANDS = Set.of("sunken swamp", "mirrored oasis", "volcanic springs");
 
 	// Catch odds
@@ -106,24 +105,26 @@ public final class BestIsland {
 	private static final String SUPPLY_PRESERVE = "supply preserve";
 	private static final long PRESERVE_MILLIS = 1_500L;
 
-	// Best island icon
-	private static final Identifier BEST_ICON = Mccinfo.id("textures/gui/best.png");
-	private static final int ICON_SIZE = 8;
-	private static final int ICON_TEXTURE = 16;
+	// Islands menu, perk upgrade lore and tooltip colors
+	private static final String ISLANDS_TITLE = "fishing islands";
+	private static final String UPGRADE_COST = "upgrade cost:";
+	private static final String UPGRADE_NOT_MET = "upgrade cost not met";
 	private static final int CHANCE_LABEL_COLOR = 0xFFFF55;
 	private static final int CHANCE_VALUE_COLOR = 0xFFFFFF;
 
-	private static final int SLOT_SIZE = 16;
 
+	// Open menus and the chances read from them
 	private static final ContainerWatch WATCH = new ContainerWatch();
 
 	private static boolean night;
 	private static int timeTicks;
 	private static Container openIslands;
+	private static Container openPerks;
 	private static Set<String> bestIslands = Set.of();
 	private static Map<String, Double> dayChances = Map.of();
 	private static Map<String, Double> nightChances = Map.of();
 
+	// Last catch, for a Supply Preserve that comes after it
 	private static long lastCatch;
 	private static boolean usedBait;
 	private static boolean usedLine;
@@ -132,6 +133,7 @@ public final class BestIsland {
 	private BestIsland() {
 	}
 
+	// Menus each tick, chances in tooltips, uses from the chat
 	public static void register() {
 		ClientTickEvents.END_CLIENT_TICK.register(BestIsland::tick);
 		ItemTooltipCallback.EVENT.register((stack, context, flag, lines) -> addChances(stack, lines));
@@ -147,6 +149,7 @@ public final class BestIsland {
 		});
 	}
 
+	// Night at the last clock read
 	static boolean night() {
 		return night;
 	}
@@ -155,6 +158,7 @@ public final class BestIsland {
 	private static void tick(Minecraft client) {
 		if (!FishCollection.allowed()) {
 			openIslands = null;
+			openPerks = null;
 			bestIslands = Set.of();
 			WATCH.reset();
 			return;
@@ -165,6 +169,7 @@ public final class BestIsland {
 		}
 		if (!(client.gui.screen() instanceof ContainerScreen screen)) {
 			openIslands = null;
+			openPerks = null;
 			bestIslands = Set.of();
 			WATCH.reset();
 			return;
@@ -181,14 +186,17 @@ public final class BestIsland {
 			return;
 		}
 		openIslands = null;
+		openPerks = null;
 		bestIslands = Set.of();
 		String title = screen.getTitle().getString().toLowerCase(Locale.ROOT);
 		if (title.contains(PERKS_TITLE) || container.getContainerSize() > TITLE_SLOT && name(container.getItem(TITLE_SLOT)).contains(PERKS_TITLE)) {
 			readPerks(container);
+			openPerks = container;
 		} else if (container.getContainerSize() > OVERCLOCKS_SLOT && name(container.getItem(OVERCLOCKS_SLOT)).contains(OVERCLOCKS_TITLE)) {
 			readPerks(container);
 			readEquipment(container);
-		} else if (container.getContainerSize() > LEVEL_SLOT && LEVEL_PATTERN.matcher(name(container.getItem(LEVEL_SLOT))).matches()) {
+		} else if (container.getContainerSize() > LEVEL_SLOT && LEVEL_PATTERN.matcher(name(container.getItem(LEVEL_SLOT))).matches()
+				|| title.contains(ISLANDS_TITLE) || container.getContainerSize() > TITLE_SLOT && name(container.getItem(TITLE_SLOT)).contains(ISLANDS_TITLE)) {
 			readBossBars(client);
 			readLockedIslands(container);
 			openIslands = container;
@@ -310,6 +318,7 @@ public final class BestIsland {
 		}
 	}
 
+	// Equipped item name, null for an empty slot
 	private static String equipped(Container container, int slot) {
 		if (slot >= container.getContainerSize() || container.getItem(slot).isEmpty()) {
 			return null;
@@ -318,6 +327,7 @@ public final class BestIsland {
 		return name.endsWith(EMPTY_SLOT_SUFFIX) ? null : name;
 	}
 
+	// Lore lines in lower case
 	private static List<String> loreLines(ItemStack stack) {
 		ItemLore lore = stack.get(DataComponents.LORE);
 		List<String> lines = new ArrayList<>();
@@ -329,6 +339,7 @@ public final class BestIsland {
 		return lines;
 	}
 
+	// "+N Perk" and "100% ... Chance" lines
 	private static void addBonuses(ItemStack stack, Map<String, Integer> bonuses) {
 		for (String line : loreLines(stack)) {
 			Matcher matcher = BONUS_PATTERN.matcher(line);
@@ -343,6 +354,7 @@ public final class BestIsland {
 		}
 	}
 
+	// "Bait Remaining: N"
 	private static Integer baitRemaining(ItemStack stack) {
 		for (String line : loreLines(stack)) {
 			Matcher matcher = BAIT_REMAINING_PATTERN.matcher(line);
@@ -353,6 +365,7 @@ public final class BestIsland {
 		return null;
 	}
 
+	// "Uses Remaining: N/M"
 	private static int[] uses(ItemStack stack) {
 		for (String line : loreLines(stack)) {
 			Matcher matcher = USES_PATTERN.matcher(line);
@@ -363,6 +376,7 @@ public final class BestIsland {
 		return null;
 	}
 
+	// Bait and line count only while uses are left
 	static boolean baitActive() {
 		ModConfig config = ModConfig.get();
 		return config.bait != null && (config.baitUses == null || config.baitUses > 0);
@@ -373,6 +387,7 @@ public final class BestIsland {
 		return config.line != null && (config.lineUses == null || config.lineUses > 0);
 	}
 
+	// Bonus of the augments, bait and line
 	static int equipment(String perk) {
 		ModConfig config = ModConfig.get();
 		int bonus = config.equipmentBonuses.getOrDefault(perk, 0);
@@ -385,6 +400,7 @@ public final class BestIsland {
 		return bonus;
 	}
 
+	// Overclock points given to a perk, Unstable skipped
 	static int overclockBonus(String perk) {
 		int bonus = 0;
 		for (Map.Entry<String, String> overclock : ModConfig.get().overclocks.entrySet()) {
@@ -396,10 +412,12 @@ public final class BestIsland {
 		return bonus;
 	}
 
+	// Perk + overclock + equipment, for the Fish Collection
 	static int total(String perk) {
 		return perk(perk) + overclockBonus(perk) + equipment(perk);
 	}
 
+	// Equipped augments with this name
 	private static int augments(String name) {
 		int count = 0;
 		for (String augment : ModConfig.get().augments) {
@@ -410,6 +428,7 @@ public final class BestIsland {
 		return count;
 	}
 
+	// Perk marked with ">" under "Overclocked Perk"
 	private static String selectedPerk(ItemStack stack) {
 		ItemLore lore = stack.get(DataComponents.LORE);
 		if (lore == null) {
@@ -433,6 +452,7 @@ public final class BestIsland {
 		return null;
 	}
 
+	// Island marked "Locked!"
 	private static boolean isLocked(ItemStack stack) {
 		ItemLore lore = stack.get(DataComponents.LORE);
 		if (lore != null) {
@@ -445,6 +465,7 @@ public final class BestIsland {
 		return false;
 	}
 
+	// Overclock points if it is set on one of these perks
 	private static int overclock(String overclock, Set<String> perks) {
 		String selected = ModConfig.get().overclocks.get(overclock);
 		return selected != null && perks.contains(selected) ? perk(overclock) : 0;
@@ -465,6 +486,7 @@ public final class BestIsland {
 		}
 	}
 
+	// Saved perk level
 	static int perk(String name) {
 		return ModConfig.get().perks.getOrDefault(name, 0);
 	}
@@ -474,6 +496,7 @@ public final class BestIsland {
 		return perk(hook) + overclock(HOOK_OVERCLOCK, Set.of(hook)) + equipment(hook);
 	}
 
+	// Strong and Boosted Rod points
 	private static int strongRodPoints() {
 		int points = overclock(ROD_OVERCLOCK, STRONG_RODS);
 		for (String rod : STRONG_RODS) {
@@ -482,6 +505,7 @@ public final class BestIsland {
 		return points;
 	}
 
+	// Chance that a catch is elusive
 	private static double elusiveChance() {
 		int augmentChance = equipment(ELUSIVE_FISH_CHANCE);
 		if (augmentChance >= GUARANTEED) {
@@ -497,10 +521,12 @@ public final class BestIsland {
 				* (1 + strongRodPoints() * ROD_MULTIPLIER_PER_POINT));
 	}
 
+	// Hook bonus on the weight or rarity odds
 	private static double hookMultiplier(String hook) {
 		return 1 + hookPoints(hook) * HOOK_MULTIPLIER_PER_POINT;
 	}
 
+	// Odds of each weight with the Strong Hook
 	private static Map<FishCollection.Weight, Double> weightChances() {
 		double weightMultiplier = hookMultiplier(STRONG_HOOK);
 		Map<FishCollection.Weight, Double> weights = new EnumMap<>(FishCollection.Weight.class);
@@ -511,6 +537,7 @@ public final class BestIsland {
 		return weights;
 	}
 
+	// Odds of each rarity with the Wise Hook and Rarity Rod
 	private static Map<FishCollection.Rarity, Double> rarityChances() {
 		double rarityMultiplier = hookMultiplier(WISE_HOOK);
 		Map<FishCollection.Rarity, Double> rarities = new EnumMap<>(FishCollection.Rarity.class);
@@ -565,6 +592,7 @@ public final class BestIsland {
 		return chances;
 	}
 
+	// Chance per elusive catch of a new fish, per island
 	static Map<String, Double> elusiveChances() {
 		Map<FishCollection.Weight, Double> weights = weightChances();
 		Map<FishCollection.Rarity, Double> rarities = rarityChances();
@@ -594,6 +622,7 @@ public final class BestIsland {
 		return pick(open, elusiveChances());
 	}
 
+	// Unlocked islands of the open menu
 	private static Set<String> bestIslands(Container container, Map<String, Double> chances) {
 		List<String> open = new ArrayList<>();
 		for (int slot = 0; slot < container.getContainerSize(); slot++) {
@@ -605,6 +634,7 @@ public final class BestIsland {
 		return pick(open, chances);
 	}
 
+	// Unlocked islands from the config
 	static Set<String> bestIslands(FishCollection.Time time) {
 		List<String> open = new ArrayList<>();
 		for (String island : FishCollection.islands()) {
@@ -682,6 +712,7 @@ public final class BestIsland {
 		}
 	}
 
+	// One use of bait and line per catch
 	private static void useSupplies(long now) {
 		ModConfig config = ModConfig.get();
 		usedBait = config.bait != null && config.baitUses != null && config.baitUses > 0;
@@ -698,6 +729,7 @@ public final class BestIsland {
 		}
 	}
 
+	// Supply Preserve: last use given back
 	private static void restoreSupplies() {
 		ModConfig config = ModConfig.get();
 		if (usedBait && config.baitUses != null) {
@@ -732,6 +764,7 @@ public final class BestIsland {
 		lines.add(2, chance("Night", nightChances.getOrDefault(island, 0.0)));
 	}
 
+	// "Day: 0.062% (1/1613)"
 	private static Component chance(String label, double chance) {
 		String value = String.format(Locale.ROOT, "%.3f%%", chance * 100);
 		if (chance > 0.0) {
@@ -750,17 +783,36 @@ public final class BestIsland {
 		if (bestIslands.isEmpty() || slot.container != openIslands || !bestIslands.contains(name(slot.getItem()))) {
 			return;
 		}
-		// Whole screen pixels per texture pixel
-		int guiScale = Math.max(1, net.minecraft.client.Minecraft.getInstance().getWindow().getGuiScale());
-		int texel = Math.max(1, ICON_SIZE * guiScale / ICON_TEXTURE);
-		int sizePixels = ICON_TEXTURE * texel;
-		graphics.pose().pushMatrix();
-		graphics.pose().translate(((slot.x + SLOT_SIZE) * guiScale - sizePixels) / (float) guiScale, slot.y);
-		graphics.pose().scale(texel / (float) guiScale, texel / (float) guiScale);
-		graphics.blit(RenderPipelines.GUI_TEXTURED, BEST_ICON, 0, 0, 0.0F, 0.0F, ICON_TEXTURE, ICON_TEXTURE, ICON_TEXTURE, ICON_TEXTURE);
-		graphics.pose().popMatrix();
+		SlotIndicators.topRight(graphics, slot, SlotIndicators.ARROW);
 	}
 
+	// Upgrade icon on the perks you can upgrade
+	public static void extractUpgradeIcon(GuiGraphicsExtractor graphics, Slot slot) {
+		if (!FishCollection.allowed() || !ModConfig.get().perkUpgradeIcon || openPerks == null || slot.container != openPerks
+				|| !canUpgrade(slot.getItem())) {
+			return;
+		}
+		SlotIndicators.bottomLeft(graphics, slot, SlotIndicators.ARROW);
+	}
+
+	// "Upgrade Cost:" without "Upgrade cost not met"
+	private static boolean canUpgrade(ItemStack stack) {
+		if (stack.isEmpty()) {
+			return false;
+		}
+		boolean cost = false;
+		for (String line : loreLines(stack)) {
+			if (line.startsWith(UPGRADE_NOT_MET)) {
+				return false;
+			}
+			if (line.equals(UPGRADE_COST)) {
+				cost = true;
+			}
+		}
+		return cost;
+	}
+
+	// Item name in lower case
 	private static String name(ItemStack stack) {
 		return stack.getHoverName().getString().trim().toLowerCase(Locale.ROOT);
 	}

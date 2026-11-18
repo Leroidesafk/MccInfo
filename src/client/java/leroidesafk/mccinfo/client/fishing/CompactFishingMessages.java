@@ -26,6 +26,7 @@ import net.minecraft.world.item.ItemStack;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Optional;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -40,6 +41,7 @@ public final class CompactFishingMessages {
 	private static final Pattern EARNED_PATTERN = Pattern.compile("You earned: (.+)$");
 	private static final Pattern BONUS_PATTERN = Pattern.compile("\\s*\\(\\+[\\d.]+%\\s*Bonus\\)\\s*$");
 	private static final String BONUS_ITEM = "cleansing_powder";
+	private static final String ISLAND_XP = "island xp";
 	private static final Pattern AMOUNT_PATTERN = Pattern.compile("^[\\d,.]+");
 	private static final Pattern GLYPHS = Pattern.compile("[-]");
 	private static final List<String> TRIGGERS = List.of("Speedy Rod", "Boosted Rod", "Graceful Rod", "Stable Rod", "Glitched Rod",
@@ -50,10 +52,12 @@ public final class CompactFishingMessages {
 	private static final long SESSION_MILLIS = 3_000L;
 	private static final long BLOCK_MILLIS = 500L;
 	private static final long PENDING_MILLIS = 1_000L;
+	// Chat lines searched and colors
 	private static final int RECENT_CHAT_LINES = 10;
 	private static final int WHITE = 0xFFFFFF;
 	private static final int XP_COLOR = 0xAAAAAA;
 
+	// Last catch line and where it is
 	private static Component current;
 	private static boolean inBox;
 	private static long lastMillis;
@@ -61,12 +65,14 @@ public final class CompactFishingMessages {
 	private static final List<Component> pending = new ArrayList<>();
 	private static long pendingSince;
 
+	// Text piece with its style
 	private record Segment(Style style, String text) {
 	}
 
 	private CompactFishingMessages() {
 	}
 
+	// Setting, MCC Island and utils permission
 	static boolean active() {
 		return ModConfig.get().compactFishingMessages && OverlayStyle.onMccIsland() && Permissions.has(Permissions.Perm.UTILS);
 	}
@@ -170,6 +176,7 @@ public final class CompactFishingMessages {
 		return addition.copy().withStyle(style -> style.applyTo(hover));
 	}
 
+	// Appends to the catch line
 	private static boolean attach(Component addition) {
 		MutableComponent updated = current.copy().append(Component.literal(" ")).append(addition);
 		if (!replace(current, updated)) {
@@ -213,10 +220,10 @@ public final class CompactFishingMessages {
 		return true;
 	}
 
-	// An earning with a "(+X% Bonus)" shows the Cleansing Powder icon
+	// Bonus and Island XP as the Cleansing Powder icon, else "+text"
 	private static Component earnedAddition(String earned) {
 		Matcher bonus = BONUS_PATTERN.matcher(earned);
-		if (bonus.find()) {
+		if (bonus.find() || earned.toLowerCase(Locale.ROOT).contains(ISLAND_XP)) {
 			Component icon = itemIcon(NeuItems.stack(BONUS_ITEM));
 			Matcher amount = AMOUNT_PATTERN.matcher(earned);
 			if (icon != null && amount.find()) {
@@ -280,6 +287,7 @@ public final class CompactFishingMessages {
 		return Component.object(new AtlasSprite(atlas, name), stack.getHoverName());
 	}
 
+	// Styled pieces of a message
 	private static List<Segment> segments(Component message) {
 		List<Segment> segments = new ArrayList<>();
 		message.visit((style, text) -> {
@@ -289,6 +297,7 @@ public final class CompactFishingMessages {
 		return segments;
 	}
 
+	// Text made only of MCC glyphs
 	private static boolean isGlyph(String text) {
 		String stripped = text.strip();
 		return !stripped.isEmpty() && GLYPHS.matcher(stripped).replaceAll("").isEmpty();

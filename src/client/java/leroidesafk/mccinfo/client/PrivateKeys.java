@@ -16,12 +16,14 @@ import java.util.function.BooleanSupplier;
 
 // Mod keys set in the MccInfo menu, not in the game Options
 public final class PrivateKeys {
+	// One key: default, combination, permission and menu link
 	public static final class Key {
 		public final String id;
 		public final String translationKey;
 		public final boolean admin;
 		private final BooleanSupplier allowed;
 		private final InputConstants.Key defaultKey;
+		private final int defaultModifiers;
 		public boolean available;
 		public String page;
 		public String section;
@@ -31,13 +33,21 @@ public final class PrivateKeys {
 		private int clicks;
 
 		private Key(String id, String translationKey, boolean admin, BooleanSupplier allowed, InputConstants.Key defaultKey, boolean available) {
+			this(id, translationKey, admin, allowed, defaultKey, 0, available);
+		}
+
+		// Default combination, like Ctrl + Middle Click
+		private Key(String id, String translationKey, boolean admin, BooleanSupplier allowed, InputConstants.Key defaultKey, int defaultModifiers,
+				boolean available) {
 			this.id = id;
 			this.translationKey = translationKey;
 			this.admin = admin;
 			this.allowed = allowed;
 			this.defaultKey = defaultKey;
+			this.defaultModifiers = defaultModifiers;
 			this.available = available;
 			this.key = defaultKey;
+			this.modifiers = defaultModifiers;
 		}
 
 		// Page and section the key links to
@@ -144,7 +154,12 @@ public final class PrivateKeys {
 			() -> Permissions.has(Permissions.Perm.UTILS), InputConstants.UNKNOWN, true).in("fishing", "screen.mccinfo.settings.section.collection");
 	public static final Key MODERATOR_PANEL = new Key("moderator_panel", "key.mccinfo.moderator_panel", false,
 			() -> Permissions.isStaff() && Permissions.isRegistered(), InputConstants.UNKNOWN, true);
-	public static final List<Key> ALL = new java.util.concurrent.CopyOnWriteArrayList<>(List.of(RECIPE_MODE, COPY_ITEM, FISH_COLLECTION, BADGE_TRACKER, MODERATOR_PANEL));
+	public static final Key FAVORITE_ITEM = new Key("favorite_item", "key.mccinfo.favorite_item", false,
+			() -> Permissions.has(Permissions.Perm.SEE_ITEMS), InputConstants.Type.MOUSE.getOrCreate(GLFW.GLFW_MOUSE_BUTTON_MIDDLE), GLFW.GLFW_MOD_CONTROL, true).in("utils", null);
+	public static final Key LOCK_COSMETIC = new Key("lock_cosmetic", "key.mccinfo.lock_cosmetic", false,
+			() -> Permissions.has(Permissions.Perm.SEE_ITEMS), InputConstants.Type.MOUSE.getOrCreate(GLFW.GLFW_MOUSE_BUTTON_MIDDLE), true).in("utils", null);
+	public static final List<Key> ALL = new java.util.concurrent.CopyOnWriteArrayList<>(List.of(RECIPE_MODE, COPY_ITEM, FAVORITE_ITEM, LOCK_COSMETIC,
+			FISH_COLLECTION, BADGE_TRACKER, MODERATOR_PANEL));
 
 	private PrivateKeys() {
 	}
@@ -185,7 +200,7 @@ public final class PrivateKeys {
 				key.modifiers = modifiersOf(modifiers, key.key);
 			} catch (IllegalArgumentException e) {
 				key.key = key.defaultKey;
-				key.modifiers = 0;
+				key.modifiers = key.defaultModifiers;
 			}
 		}
 	}

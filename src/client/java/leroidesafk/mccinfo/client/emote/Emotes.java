@@ -509,7 +509,8 @@ public final class Emotes {
 		PASSENGER_MOTION.remove(state);
 		HIDDEN_PASSENGERS.remove(state);
 		Minecraft client = Minecraft.getInstance();
-		if (ModConfig.get().hideFirstPersonBackpack && client.options.getCameraType().isFirstPerson() && entity != client.getCameraEntity()
+		// Own cloak hidden in first person
+		if (ModConfig.get().hideFirstPersonCloak && client.options.getCameraType().isFirstPerson() && entity != client.getCameraEntity()
 				&& entity.getRootVehicle() == client.getCameraEntity()) {
 			HIDDEN_PASSENGERS.put(state, Boolean.TRUE);
 			return;

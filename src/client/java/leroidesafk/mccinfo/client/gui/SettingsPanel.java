@@ -1184,7 +1184,7 @@ public final class SettingsPanel {
 				addHit(x, y, width, CONTROL_HEIGHT, () -> {
 					this.focus.accept(box);
 					box.onClick(new net.minecraft.client.input.MouseButtonEvent(this.clickX, this.clickY,
-							new net.minecraft.client.input.MouseButtonInfo(org.lwjgl.glfw.GLFW.GLFW_MOUSE_BUTTON_LEFT, 0)), false);
+							new net.minecraft.client.input.MouseButtonInfo(com.mojang.blaze3d.platform.InputConstants.MOUSE_BUTTON_LEFT, 0)), false);
 				});
 			}
 			case Action action -> {

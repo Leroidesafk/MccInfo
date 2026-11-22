@@ -19,7 +19,7 @@ import net.minecraft.client.gui.screens.inventory.tooltip.ClientTooltipComponent
 import net.minecraft.client.gui.screens.inventory.tooltip.DefaultTooltipPositioner;
 import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.network.chat.Component;
-import org.lwjgl.glfw.GLFW;
+import com.mojang.blaze3d.platform.InputConstants;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -228,7 +228,7 @@ public final class QuestLockBar {
 		if (!overBar && !overList) {
 			return false;
 		}
-		if (event.button() != GLFW.GLFW_MOUSE_BUTTON_LEFT) {
+		if (event.button() != InputConstants.MOUSE_BUTTON_LEFT) {
 			return true;
 		}
 		for (Cell cell : cells) {

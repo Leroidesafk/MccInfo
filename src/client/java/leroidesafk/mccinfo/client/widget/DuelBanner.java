@@ -1,6 +1,6 @@
 package leroidesafk.mccinfo.client.widget;
 
-import com.mojang.blaze3d.pipeline.RenderPipeline;
+import com.mojang.renderpearl.api.pipeline.RenderPipeline;
 import com.mojang.blaze3d.platform.NativeImage;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import leroidesafk.mccinfo.Mccinfo;

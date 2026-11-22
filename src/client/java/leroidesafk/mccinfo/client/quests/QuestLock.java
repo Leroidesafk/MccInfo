@@ -32,7 +32,7 @@ import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.component.ItemLore;
-import org.lwjgl.glfw.GLFW;
+import com.mojang.blaze3d.platform.InputConstants;
 
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -335,7 +335,7 @@ public final class QuestLock {
 		if (slot == null || slot.container instanceof Inventory) {
 			return false;
 		}
-		boolean shift = (event.modifiers() & GLFW.GLFW_MOD_SHIFT) != 0;
+		boolean shift = (event.modifiers() & InputConstants.MOD_SHIFT) != 0;
 		if (shift && active() && waitingReroll(slot)) {
 			blockedSound();
 			return true;
@@ -351,7 +351,7 @@ public final class QuestLock {
 			}
 			return false;
 		}
-		if (!shift && event.button() == GLFW.GLFW_MOUSE_BUTTON_RIGHT) {
+		if (!shift && event.button() == InputConstants.MOUSE_BUTTON_RIGHT) {
 			UNLOCKED.add(key(slot.getItem(), found(slot.getItem())));
 			NeuItems.clickSound();
 			return true;

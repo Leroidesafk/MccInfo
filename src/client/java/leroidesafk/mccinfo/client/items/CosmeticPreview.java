@@ -48,7 +48,6 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import org.joml.Quaternionf;
 import org.joml.Vector3f;
-import org.lwjgl.glfw.GLFW;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -241,7 +240,7 @@ public final class CosmeticPreview {
 
 	private static Component lockLine(boolean locked) {
 		PrivateKeys.Key key = PrivateKeys.LOCK_COSMETIC;
-		boolean middle = key.key().getType() == InputConstants.Type.MOUSE && key.key().getValue() == GLFW.GLFW_MOUSE_BUTTON_MIDDLE && key.modifiers() == 0;
+		boolean middle = key.key().getType() == InputConstants.Type.MOUSE && key.key().getValue() == InputConstants.MOUSE_BUTTON_MIDDLE && key.modifiers() == 0;
 		MutableComponent line = Component.empty();
 		if (middle) {
 			line.append(Component.literal(MIDDLE_CLICK_ICON).withStyle(style -> style.withFont(ICON_FONT).withColor(ICON_COLOR)));
@@ -377,7 +376,7 @@ public final class CosmeticPreview {
 				}
 			}
 		}
-		if (event.button() != GLFW.GLFW_MOUSE_BUTTON_LEFT) {
+		if (event.button() != InputConstants.MOUSE_BUTTON_LEFT) {
 			return false;
 		}
 		if (layout.inDoll(x, y)) {
@@ -827,7 +826,7 @@ public final class CosmeticPreview {
 			model.root().translateAndRotate(poseStack);
 			model.body.translateAndRotate(poseStack);
 			poseStack.translate(0.0F, BACK_OFFSET, 0.0F);
-			poseStack.mulPose(Axis.YP.rotationDegrees(180.0F));
+			poseStack.rotate(Axis.YP.rotationDegrees(180.0F));
 			poseStack.scale(BACK_SCALE, -BACK_SCALE, -BACK_SCALE);
 			back.submit(poseStack, collector, lightCoords, OverlayTexture.NO_OVERLAY, state.outlineColor);
 			poseStack.popPose();

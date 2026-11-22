@@ -48,7 +48,7 @@ public final class NpcGroupRenderer extends PictureInPictureRenderer<NpcGroupRen
 		for (Entry entry : state.entries()) {
 			pose.pushPose();
 			pose.translate(entry.translation().x(), entry.translation().y(), entry.translation().z());
-			pose.mulPose(state.rotation());
+			pose.rotate(state.rotation());
 			this.dispatcher.submit(entry.renderState(), camera, 0.0, 0.0, 0.0, pose, collector);
 			pose.popPose();
 		}

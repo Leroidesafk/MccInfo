@@ -90,7 +90,7 @@ public final class EmotePreviewRenderer extends PictureInPictureRenderer<EmotePr
 		camera.orientation = new Quaternionf().rotateY((float) Math.PI);
 		pose.pushPose();
 		pose.translate(0.0F, SCENE_CENTER, 0.0F);
-		pose.mulPose(view);
+		pose.rotate(view);
 		this.dispatcher.submit(state.player(), camera, 0.0, 0.0, 0.0, pose, collector);
 		if (state.emote() != null) {
 			pose.scale(1.0F / 16.0F, 1.0F / 16.0F, 1.0F / 16.0F);

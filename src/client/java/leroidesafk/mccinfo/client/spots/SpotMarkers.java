@@ -2,7 +2,7 @@ package leroidesafk.mccinfo.client.spots;
 
 import leroidesafk.mccinfo.client.gui.ScreenOpenAnimation;
 import leroidesafk.mccinfo.client.gui.OverlayStyle;
-import com.mojang.blaze3d.pipeline.RenderPipeline;
+import com.mojang.renderpearl.api.pipeline.RenderPipeline;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;

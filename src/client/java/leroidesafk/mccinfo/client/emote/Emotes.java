@@ -609,7 +609,7 @@ public final class Emotes {
 				if (!hidden) {
 					poseStack.pushPose();
 					poseStack.translate(position.x - camera.pos.x, position.y - camera.pos.y, position.z - camera.pos.z);
-					poseStack.mulPose(Axis.YP.rotationDegrees(MODEL_TURN - yaw));
+					poseStack.rotate(Axis.YP.rotationDegrees(MODEL_TURN - yaw));
 					poseStack.scale(MODEL_SCALE, MODEL_SCALE, MODEL_SCALE);
 					int light = LightCoordsUtil.getLightCoords(level, BlockPos.containing(player.getEyePosition(partial)));
 					EmoteRender.submitModel(context.submitNodeCollector(), poseStack, emote, matrices, light,

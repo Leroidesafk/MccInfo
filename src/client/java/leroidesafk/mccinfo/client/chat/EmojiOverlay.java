@@ -13,7 +13,7 @@ import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.network.chat.Component;
 import net.minecraft.util.Mth;
 import net.minecraft.util.Util;
-import org.lwjgl.glfw.GLFW;
+import com.mojang.blaze3d.platform.InputConstants;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -204,7 +204,7 @@ public final class EmojiOverlay {
 		double mouseY = mouseY(client);
 		// Scrollbar drag
 		if (draggingScrollbar) {
-			if (GLFW.glfwGetMouseButton(client.getWindow().handle(), GLFW.GLFW_MOUSE_BUTTON_LEFT) == GLFW.GLFW_PRESS) {
+			if (client.mouseHandler.isLeftPressed()) {
 				dragScrollbar(y, mouseY);
 			} else {
 				draggingScrollbar = false;
@@ -294,7 +294,7 @@ public final class EmojiOverlay {
 	}
 
 	public static boolean mouseClicked(MouseButtonEvent event) {
-		if (event.button() != GLFW.GLFW_MOUSE_BUTTON_LEFT || !MOVABLE.visible()) {
+		if (event.button() != InputConstants.MOUSE_BUTTON_LEFT || !MOVABLE.visible()) {
 			return false;
 		}
 		Minecraft client = Minecraft.getInstance();

@@ -12,7 +12,7 @@ import net.minecraft.client.input.KeyEvent;
 import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.network.chat.Component;
 import net.minecraft.util.FormattedCharSequence;
-import org.lwjgl.glfw.GLFW;
+import com.mojang.blaze3d.platform.InputConstants;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -162,7 +162,7 @@ public final class VoiceDisclaimerScreen extends Screen {
 
 	@Override
 	public boolean mouseClicked(MouseButtonEvent event, boolean doubleClick) {
-		if (event.button() == GLFW.GLFW_MOUSE_BUTTON_LEFT && overButton(event.x() / this.scale, event.y() / this.scale)) {
+		if (event.button() == InputConstants.MOUSE_BUTTON_LEFT && overButton(event.x() / this.scale, event.y() / this.scale)) {
 			accept();
 			return true;
 		}
@@ -172,7 +172,7 @@ public final class VoiceDisclaimerScreen extends Screen {
 	// Enter or Escape also accept
 	@Override
 	public boolean keyPressed(KeyEvent event) {
-		if (event.key() == GLFW.GLFW_KEY_ENTER || event.key() == GLFW.GLFW_KEY_KP_ENTER || event.key() == GLFW.GLFW_KEY_ESCAPE) {
+		if (event.key() == InputConstants.KEY_RETURN || event.key() == InputConstants.KEY_NUMPADENTER || event.key() == InputConstants.KEY_ESCAPE) {
 			accept();
 			return true;
 		}

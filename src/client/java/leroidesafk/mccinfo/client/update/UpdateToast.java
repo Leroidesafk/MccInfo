@@ -19,7 +19,7 @@ import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.network.chat.Component;
 import net.minecraft.util.FormattedCharSequence;
 import net.minecraft.util.Util;
-import org.lwjgl.glfw.GLFW;
+import com.mojang.blaze3d.platform.InputConstants;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -217,7 +217,7 @@ public final class UpdateToast {
 			return false;
 		}
 		// Clicks only once fully shown
-		if (slide < 1.0F || event.button() != GLFW.GLFW_MOUSE_BUTTON_LEFT) {
+		if (slide < 1.0F || event.button() != InputConstants.MOUSE_BUTTON_LEFT) {
 			return true;
 		}
 		if (mainEnabled && main.contains(event.x(), event.y())) {

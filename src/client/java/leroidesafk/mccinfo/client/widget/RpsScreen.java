@@ -10,7 +10,7 @@ import net.minecraft.client.renderer.RenderPipelines;
 import net.minecraft.network.chat.Component;
 import net.minecraft.util.Mth;
 import net.minecraft.util.Util;
-import org.lwjgl.glfw.GLFW;
+import com.mojang.blaze3d.platform.InputConstants;
 
 public final class RpsScreen extends Screen {
 	private static final int TEXT_COLOR = 0xFFFFFFFF;
@@ -313,7 +313,7 @@ public final class RpsScreen extends Screen {
 	@Override
 	public boolean mouseClicked(MouseButtonEvent event, boolean doubleClick) {
 		RockPaperScissors.Match match = RockPaperScissors.current();
-		if (match != null && introDone() && match.phase == RockPaperScissors.Phase.CHOOSING && event.button() == GLFW.GLFW_MOUSE_BUTTON_LEFT) {
+		if (match != null && introDone() && match.phase == RockPaperScissors.Phase.CHOOSING && event.button() == InputConstants.MOUSE_BUTTON_LEFT) {
 			int segment = segmentAt(event.x(), event.y());
 			if (segment >= 0) {
 				RockPaperScissors.choose(RockPaperScissors.Choice.values()[segment]);

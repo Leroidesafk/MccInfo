@@ -13,7 +13,7 @@ import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
-import org.lwjgl.glfw.GLFW;
+import org.lwjgl.sdl.SDLKeyboard;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -21,7 +21,8 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-import static org.lwjgl.glfw.GLFW.*;
+import static com.mojang.blaze3d.platform.InputConstants.*;
+import static org.lwjgl.sdl.SDLScancode.*;
 
 public final class KeyboardLayoutScreen extends Screen implements MenuBackdrop.Overlay {
 	// Keyboard size and layout
@@ -107,90 +108,90 @@ public final class KeyboardLayoutScreen extends Screen implements MenuBackdrop.O
 	private static final Map<Integer, String> AZERTY_NAMES = new HashMap<>();
 
 	static {
-		NAMES.put(GLFW_KEY_ESCAPE, "Esc");
-		NAMES.put(GLFW_KEY_GRAVE_ACCENT, "`");
-		NAMES.put(GLFW_KEY_MINUS, "-");
-		NAMES.put(GLFW_KEY_EQUAL, "=");
-		NAMES.put(GLFW_KEY_BACKSPACE, "Back");
-		NAMES.put(GLFW_KEY_TAB, "Tab");
-		NAMES.put(GLFW_KEY_LEFT_BRACKET, "[");
-		NAMES.put(GLFW_KEY_RIGHT_BRACKET, "]");
-		NAMES.put(GLFW_KEY_BACKSLASH, "\\");
-		NAMES.put(GLFW_KEY_CAPS_LOCK, "Caps");
-		NAMES.put(GLFW_KEY_SEMICOLON, ";");
-		NAMES.put(GLFW_KEY_APOSTROPHE, "'");
-		NAMES.put(GLFW_KEY_ENTER, "Enter");
-		NAMES.put(GLFW_KEY_LEFT_SHIFT, "Shift");
-		NAMES.put(GLFW_KEY_RIGHT_SHIFT, "Shift");
-		NAMES.put(GLFW_KEY_WORLD_2, "\\");
-		NAMES.put(GLFW_KEY_COMMA, ",");
-		NAMES.put(GLFW_KEY_PERIOD, ".");
-		NAMES.put(GLFW_KEY_SLASH, "/");
-		NAMES.put(GLFW_KEY_LEFT_CONTROL, "Ctrl");
-		NAMES.put(GLFW_KEY_RIGHT_CONTROL, "Ctrl");
-		NAMES.put(GLFW_KEY_LEFT_SUPER, "Win");
-		NAMES.put(GLFW_KEY_RIGHT_SUPER, "Win");
-		NAMES.put(GLFW_KEY_LEFT_ALT, "Alt");
-		NAMES.put(GLFW_KEY_RIGHT_ALT, "Alt");
-		NAMES.put(GLFW_KEY_MENU, "Menu");
-		NAMES.put(GLFW_KEY_SPACE, "Space");
-		NAMES.put(GLFW_KEY_PRINT_SCREEN, "PrtSc");
-		NAMES.put(GLFW_KEY_SCROLL_LOCK, "ScrLk");
-		NAMES.put(GLFW_KEY_PAUSE, "Pause");
-		NAMES.put(GLFW_KEY_INSERT, "Ins");
-		NAMES.put(GLFW_KEY_HOME, "Home");
-		NAMES.put(GLFW_KEY_PAGE_UP, "PgUp");
-		NAMES.put(GLFW_KEY_DELETE, "Del");
-		NAMES.put(GLFW_KEY_END, "End");
-		NAMES.put(GLFW_KEY_PAGE_DOWN, "PgDn");
-		NAMES.put(GLFW_KEY_UP, "↑");
-		NAMES.put(GLFW_KEY_DOWN, "↓");
-		NAMES.put(GLFW_KEY_LEFT, "←");
-		NAMES.put(GLFW_KEY_RIGHT, "→");
-		NAMES.put(GLFW_KEY_NUM_LOCK, "Num");
-		NAMES.put(GLFW_KEY_KP_DIVIDE, "/");
-		NAMES.put(GLFW_KEY_KP_MULTIPLY, "*");
-		NAMES.put(GLFW_KEY_KP_SUBTRACT, "-");
-		NAMES.put(GLFW_KEY_KP_ADD, "+");
-		NAMES.put(GLFW_KEY_KP_ENTER, "Enter");
-		NAMES.put(GLFW_KEY_KP_DECIMAL, ".");
+		NAMES.put(KEY_ESCAPE, "Esc");
+		NAMES.put(KEY_GRAVE, "`");
+		NAMES.put(KEY_MINUS, "-");
+		NAMES.put(KEY_EQUALS, "=");
+		NAMES.put(KEY_BACKSPACE, "Back");
+		NAMES.put(KEY_TAB, "Tab");
+		NAMES.put(KEY_LBRACKET, "[");
+		NAMES.put(KEY_RBRACKET, "]");
+		NAMES.put(KEY_BACKSLASH, "\\");
+		NAMES.put(KEY_CAPSLOCK, "Caps");
+		NAMES.put(KEY_SEMICOLON, ";");
+		NAMES.put(KEY_APOSTROPHE, "'");
+		NAMES.put(KEY_RETURN, "Enter");
+		NAMES.put(KEY_LSHIFT, "Shift");
+		NAMES.put(KEY_RSHIFT, "Shift");
+		NAMES.put(SDL_SCANCODE_NONUSBACKSLASH, "\\");
+		NAMES.put(KEY_COMMA, ",");
+		NAMES.put(KEY_PERIOD, ".");
+		NAMES.put(KEY_SLASH, "/");
+		NAMES.put(KEY_LCONTROL, "Ctrl");
+		NAMES.put(KEY_RCONTROL, "Ctrl");
+		NAMES.put(KEY_LGUI, "Win");
+		NAMES.put(KEY_RGUI, "Win");
+		NAMES.put(KEY_LALT, "Alt");
+		NAMES.put(KEY_RALT, "Alt");
+		NAMES.put(SDL_SCANCODE_APPLICATION, "Menu");
+		NAMES.put(KEY_SPACE, "Space");
+		NAMES.put(KEY_PRINTSCREEN, "PrtSc");
+		NAMES.put(KEY_SCROLLLOCK, "ScrLk");
+		NAMES.put(KEY_PAUSE, "Pause");
+		NAMES.put(KEY_INSERT, "Ins");
+		NAMES.put(KEY_HOME, "Home");
+		NAMES.put(KEY_PAGEUP, "PgUp");
+		NAMES.put(KEY_DELETE, "Del");
+		NAMES.put(KEY_END, "End");
+		NAMES.put(KEY_PAGEDOWN, "PgDn");
+		NAMES.put(KEY_UP, "↑");
+		NAMES.put(KEY_DOWN, "↓");
+		NAMES.put(KEY_LEFT, "←");
+		NAMES.put(KEY_RIGHT, "→");
+		NAMES.put(KEY_NUMLOCK, "Num");
+		NAMES.put(SDL_SCANCODE_KP_DIVIDE, "/");
+		NAMES.put(KEY_MULTIPLY, "*");
+		NAMES.put(SDL_SCANCODE_KP_MINUS, "-");
+		NAMES.put(KEY_ADD, "+");
+		NAMES.put(KEY_NUMPADENTER, "Enter");
+		NAMES.put(SDL_SCANCODE_KP_PERIOD, ".");
 
-		AZERTY_NAMES.put(GLFW_KEY_GRAVE_ACCENT, "²");
-		AZERTY_NAMES.put(GLFW_KEY_1, "&");
-		AZERTY_NAMES.put(GLFW_KEY_2, "é");
-		AZERTY_NAMES.put(GLFW_KEY_3, "\"");
-		AZERTY_NAMES.put(GLFW_KEY_4, "'");
-		AZERTY_NAMES.put(GLFW_KEY_5, "(");
-		AZERTY_NAMES.put(GLFW_KEY_6, "-");
-		AZERTY_NAMES.put(GLFW_KEY_7, "è");
-		AZERTY_NAMES.put(GLFW_KEY_8, "_");
-		AZERTY_NAMES.put(GLFW_KEY_9, "ç");
-		AZERTY_NAMES.put(GLFW_KEY_0, "à");
-		AZERTY_NAMES.put(GLFW_KEY_MINUS, ")");
-		AZERTY_NAMES.put(GLFW_KEY_EQUAL, "=");
-		AZERTY_NAMES.put(GLFW_KEY_Q, "A");
-		AZERTY_NAMES.put(GLFW_KEY_W, "Z");
-		AZERTY_NAMES.put(GLFW_KEY_LEFT_BRACKET, "^");
-		AZERTY_NAMES.put(GLFW_KEY_RIGHT_BRACKET, "$");
-		AZERTY_NAMES.put(GLFW_KEY_A, "Q");
-		AZERTY_NAMES.put(GLFW_KEY_SEMICOLON, "M");
-		AZERTY_NAMES.put(GLFW_KEY_APOSTROPHE, "ù");
-		AZERTY_NAMES.put(GLFW_KEY_BACKSLASH, "*");
-		AZERTY_NAMES.put(GLFW_KEY_WORLD_2, "<");
-		AZERTY_NAMES.put(GLFW_KEY_Z, "W");
-		AZERTY_NAMES.put(GLFW_KEY_M, ",");
-		AZERTY_NAMES.put(GLFW_KEY_COMMA, ";");
-		AZERTY_NAMES.put(GLFW_KEY_PERIOD, ":");
-		AZERTY_NAMES.put(GLFW_KEY_SLASH, "!");
-		AZERTY_NAMES.put(GLFW_KEY_RIGHT_ALT, "AltGr");
-		AZERTY_NAMES.put(GLFW_KEY_LEFT_SHIFT, "Maj");
-		AZERTY_NAMES.put(GLFW_KEY_RIGHT_SHIFT, "Maj");
-		AZERTY_NAMES.put(GLFW_KEY_CAPS_LOCK, "Verr");
-		AZERTY_NAMES.put(GLFW_KEY_BACKSPACE, "Retour");
-		AZERTY_NAMES.put(GLFW_KEY_ENTER, "Entrée");
-		AZERTY_NAMES.put(GLFW_KEY_KP_ENTER, "Entr");
-		AZERTY_NAMES.put(GLFW_KEY_ESCAPE, "Échap");
-		AZERTY_NAMES.put(GLFW_KEY_SPACE, "Espace");
+		AZERTY_NAMES.put(KEY_GRAVE, "²");
+		AZERTY_NAMES.put(KEY_1, "&");
+		AZERTY_NAMES.put(KEY_2, "é");
+		AZERTY_NAMES.put(KEY_3, "\"");
+		AZERTY_NAMES.put(KEY_4, "'");
+		AZERTY_NAMES.put(KEY_5, "(");
+		AZERTY_NAMES.put(KEY_6, "-");
+		AZERTY_NAMES.put(KEY_7, "è");
+		AZERTY_NAMES.put(KEY_8, "_");
+		AZERTY_NAMES.put(KEY_9, "ç");
+		AZERTY_NAMES.put(KEY_0, "à");
+		AZERTY_NAMES.put(KEY_MINUS, ")");
+		AZERTY_NAMES.put(KEY_EQUALS, "=");
+		AZERTY_NAMES.put(KEY_Q, "A");
+		AZERTY_NAMES.put(KEY_W, "Z");
+		AZERTY_NAMES.put(KEY_LBRACKET, "^");
+		AZERTY_NAMES.put(KEY_RBRACKET, "$");
+		AZERTY_NAMES.put(KEY_A, "Q");
+		AZERTY_NAMES.put(KEY_SEMICOLON, "M");
+		AZERTY_NAMES.put(KEY_APOSTROPHE, "ù");
+		AZERTY_NAMES.put(KEY_BACKSLASH, "*");
+		AZERTY_NAMES.put(SDL_SCANCODE_NONUSBACKSLASH, "<");
+		AZERTY_NAMES.put(KEY_Z, "W");
+		AZERTY_NAMES.put(KEY_M, ",");
+		AZERTY_NAMES.put(KEY_COMMA, ";");
+		AZERTY_NAMES.put(KEY_PERIOD, ":");
+		AZERTY_NAMES.put(KEY_SLASH, "!");
+		AZERTY_NAMES.put(KEY_RALT, "AltGr");
+		AZERTY_NAMES.put(KEY_LSHIFT, "Maj");
+		AZERTY_NAMES.put(KEY_RSHIFT, "Maj");
+		AZERTY_NAMES.put(KEY_CAPSLOCK, "Verr");
+		AZERTY_NAMES.put(KEY_BACKSPACE, "Retour");
+		AZERTY_NAMES.put(KEY_RETURN, "Entrée");
+		AZERTY_NAMES.put(KEY_NUMPADENTER, "Entr");
+		AZERTY_NAMES.put(KEY_ESCAPE, "Échap");
+		AZERTY_NAMES.put(KEY_SPACE, "Espace");
 	}
 
 	private final Screen parent;
@@ -232,8 +233,8 @@ public final class KeyboardLayoutScreen extends Screen implements MenuBackdrop.O
 
 	// AZERTY from the system keyboard
 	private static Layout detectLayout() {
-		String name = GLFW.glfwGetKeyName(GLFW_KEY_Q, 0);
-		return "a".equalsIgnoreCase(name) ? Layout.AZERTY : Layout.QWERTY;
+		int key = SDLKeyboard.SDL_GetKeyFromScancode(KEY_Q, (short) 0, false);
+		return key == 'a' ? Layout.AZERTY : Layout.QWERTY;
 	}
 
 	@Override
@@ -280,7 +281,7 @@ public final class KeyboardLayoutScreen extends Screen implements MenuBackdrop.O
 
 	@Override
 	public boolean mouseClicked(MouseButtonEvent event, boolean doubleClick) {
-		Tab tab = event.button() == GLFW_MOUSE_BUTTON_LEFT ? tabAt(event.x(), event.y()) : null;
+		Tab tab = event.button() == MOUSE_BUTTON_LEFT ? tabAt(event.x(), event.y()) : null;
 		if (tab != null && !tab.selected()) {
 			tab.select().run();
 			ModConfig config = ModConfig.get();
@@ -409,7 +410,7 @@ public final class KeyboardLayoutScreen extends Screen implements MenuBackdrop.O
 
 		List<String> missing = new ArrayList<>();
 		for (Map.Entry<InputConstants.Key, List<Binding>> entry : bindings.entrySet()) {
-			if (entry.getKey().getType() == InputConstants.Type.KEYSYM && this.board.caps().stream().noneMatch(cap -> entry.getKey().equals(cap.key()))) {
+			if (entry.getKey().getType() == InputConstants.Type.KEYBOARD && this.board.caps().stream().noneMatch(cap -> entry.getKey().equals(cap.key()))) {
 				missing.add(entry.getKey().getDisplayName().getString());
 			}
 		}
@@ -555,14 +556,20 @@ public final class KeyboardLayoutScreen extends Screen implements MenuBackdrop.O
 		if (layout == Layout.AZERTY && AZERTY_NAMES.containsKey(code)) {
 			return AZERTY_NAMES.get(code);
 		}
-		if (code >= GLFW_KEY_A && code <= GLFW_KEY_Z || code >= GLFW_KEY_0 && code <= GLFW_KEY_9) {
-			return String.valueOf((char) code);
+		if (code >= KEY_A && code <= KEY_Z) {
+			return String.valueOf((char) ('A' + code - KEY_A));
 		}
-		if (code >= GLFW_KEY_F1 && code <= GLFW_KEY_F25) {
-			return "F" + (code - GLFW_KEY_F1 + 1);
+		if (code >= KEY_1 && code <= KEY_0) {
+			return code == KEY_0 ? "0" : String.valueOf(code - KEY_1 + 1);
 		}
-		if (code >= GLFW_KEY_KP_0 && code <= GLFW_KEY_KP_9) {
-			return String.valueOf(code - GLFW_KEY_KP_0);
+		if (code >= KEY_F1 && code <= KEY_F12) {
+			return "F" + (code - KEY_F1 + 1);
+		}
+		if (code >= KEY_F13 && code <= KEY_F24) {
+			return "F" + (code - KEY_F13 + 13);
+		}
+		if (code >= KEY_NUMPAD1 && code <= KEY_NUMPAD0) {
+			return code == KEY_NUMPAD0 ? "0" : String.valueOf(code - KEY_NUMPAD1 + 1);
 		}
 		return NAMES.getOrDefault(code, "?");
 	}
@@ -582,7 +589,7 @@ public final class KeyboardLayoutScreen extends Screen implements MenuBackdrop.O
 		}
 
 		Row key(int code, float width) {
-			this.caps.add(new Cap(InputConstants.Type.KEYSYM.getOrCreate(code), label(code, this.layout), List.of(new Rect(this.x, this.y, width, 1))));
+			this.caps.add(new Cap(InputConstants.Type.KEYBOARD.getOrCreate(code), label(code, this.layout), List.of(new Rect(this.x, this.y, width, 1))));
 			this.x += width;
 			return this;
 		}
@@ -614,7 +621,7 @@ public final class KeyboardLayoutScreen extends Screen implements MenuBackdrop.O
 	}
 
 	private static Cap single(int code, Layout layout, Rect... rects) {
-		return new Cap(InputConstants.Type.KEYSYM.getOrCreate(code), label(code, layout), List.of(rects));
+		return new Cap(InputConstants.Type.KEYBOARD.getOrCreate(code), label(code, layout), List.of(rects));
 	}
 
 	private static Cap mouse(int button, String label, Rect rect) {
@@ -627,11 +634,11 @@ public final class KeyboardLayoutScreen extends Screen implements MenuBackdrop.O
 		boolean iso = layout == Layout.AZERTY;
 		float top = 0;
 		if (size == Size.FULL) {
-			new Row(caps, layout, 0, 0).keys(GLFW_KEY_ESCAPE).gap(1).range(GLFW_KEY_F1, GLFW_KEY_F4).gap(0.5F).range(GLFW_KEY_F5, GLFW_KEY_F8)
-					.gap(0.5F).range(GLFW_KEY_F9, GLFW_KEY_F12).gap(0.25F).keys(GLFW_KEY_PRINT_SCREEN, GLFW_KEY_SCROLL_LOCK, GLFW_KEY_PAUSE);
+			new Row(caps, layout, 0, 0).keys(KEY_ESCAPE).gap(1).range(KEY_F1, KEY_F4).gap(0.5F).range(KEY_F5, KEY_F8)
+					.gap(0.5F).range(KEY_F9, KEY_F12).gap(0.25F).keys(KEY_PRINTSCREEN, KEY_SCROLLLOCK, KEY_PAUSE);
 			top = 1.25F;
 		} else if (size == Size.SEVENTY_FIVE) {
-			new Row(caps, layout, 0, 0).keys(GLFW_KEY_ESCAPE).range(GLFW_KEY_F1, GLFW_KEY_F12).keys(GLFW_KEY_PRINT_SCREEN, GLFW_KEY_INSERT, GLFW_KEY_DELETE);
+			new Row(caps, layout, 0, 0).keys(KEY_ESCAPE).range(KEY_F1, KEY_F12).keys(KEY_PRINTSCREEN, KEY_INSERT, KEY_DELETE);
 			top = 1;
 		}
 		float r1 = top;
@@ -640,68 +647,68 @@ public final class KeyboardLayoutScreen extends Screen implements MenuBackdrop.O
 		float r4 = top + 3;
 		float r5 = top + 4;
 
-		new Row(caps, layout, 0, r1).keys(size == Size.SIXTY ? GLFW_KEY_ESCAPE : GLFW_KEY_GRAVE_ACCENT)
-				.range(GLFW_KEY_1, GLFW_KEY_9).keys(GLFW_KEY_0, GLFW_KEY_MINUS, GLFW_KEY_EQUAL).key(GLFW_KEY_BACKSPACE, 2);
-		Row row2 = new Row(caps, layout, 0, r2).key(GLFW_KEY_TAB, 1.5F)
-				.keys(GLFW_KEY_Q, GLFW_KEY_W, GLFW_KEY_E, GLFW_KEY_R, GLFW_KEY_T, GLFW_KEY_Y, GLFW_KEY_U, GLFW_KEY_I, GLFW_KEY_O, GLFW_KEY_P,
-						GLFW_KEY_LEFT_BRACKET, GLFW_KEY_RIGHT_BRACKET);
-		Row row3 = new Row(caps, layout, 0, r3).key(GLFW_KEY_CAPS_LOCK, 1.75F)
-				.keys(GLFW_KEY_A, GLFW_KEY_S, GLFW_KEY_D, GLFW_KEY_F, GLFW_KEY_G, GLFW_KEY_H, GLFW_KEY_J, GLFW_KEY_K, GLFW_KEY_L,
-						GLFW_KEY_SEMICOLON, GLFW_KEY_APOSTROPHE);
+		new Row(caps, layout, 0, r1).keys(size == Size.SIXTY ? KEY_ESCAPE : KEY_GRAVE)
+				.range(KEY_1, KEY_9).keys(KEY_0, KEY_MINUS, KEY_EQUALS).key(KEY_BACKSPACE, 2);
+		Row row2 = new Row(caps, layout, 0, r2).key(KEY_TAB, 1.5F)
+				.keys(KEY_Q, KEY_W, KEY_E, KEY_R, KEY_T, KEY_Y, KEY_U, KEY_I, KEY_O, KEY_P,
+						KEY_LBRACKET, KEY_RBRACKET);
+		Row row3 = new Row(caps, layout, 0, r3).key(KEY_CAPSLOCK, 1.75F)
+				.keys(KEY_A, KEY_S, KEY_D, KEY_F, KEY_G, KEY_H, KEY_J, KEY_K, KEY_L,
+						KEY_SEMICOLON, KEY_APOSTROPHE);
 		Row row4 = new Row(caps, layout, 0, r4);
 		if (iso) {
-			row3.keys(GLFW_KEY_BACKSLASH);
-			caps.add(single(GLFW_KEY_ENTER, layout, new Rect(13.5F, r2, 1.5F, 1), new Rect(13.75F, r2 + 0.5F, 1.25F, 1.5F)));
-			row4.key(GLFW_KEY_LEFT_SHIFT, 1.25F).keys(GLFW_KEY_WORLD_2);
+			row3.keys(KEY_BACKSLASH);
+			caps.add(single(KEY_RETURN, layout, new Rect(13.5F, r2, 1.5F, 1), new Rect(13.75F, r2 + 0.5F, 1.25F, 1.5F)));
+			row4.key(KEY_LSHIFT, 1.25F).keys(SDL_SCANCODE_NONUSBACKSLASH);
 		} else {
-			row2.key(GLFW_KEY_BACKSLASH, 1.5F);
-			row3.key(GLFW_KEY_ENTER, 2.25F);
-			row4.key(GLFW_KEY_LEFT_SHIFT, 2.25F);
+			row2.key(KEY_BACKSLASH, 1.5F);
+			row3.key(KEY_RETURN, 2.25F);
+			row4.key(KEY_LSHIFT, 2.25F);
 		}
-		row4.keys(GLFW_KEY_Z, GLFW_KEY_X, GLFW_KEY_C, GLFW_KEY_V, GLFW_KEY_B, GLFW_KEY_N, GLFW_KEY_M, GLFW_KEY_COMMA, GLFW_KEY_PERIOD, GLFW_KEY_SLASH)
-				.key(GLFW_KEY_RIGHT_SHIFT, size == Size.SEVENTY_FIVE ? 1.75F : 2.75F);
-		Row row5 = new Row(caps, layout, 0, r5).key(GLFW_KEY_LEFT_CONTROL, 1.25F).key(GLFW_KEY_LEFT_SUPER, 1.25F).key(GLFW_KEY_LEFT_ALT, 1.25F)
-				.key(GLFW_KEY_SPACE, 6.25F);
+		row4.keys(KEY_Z, KEY_X, KEY_C, KEY_V, KEY_B, KEY_N, KEY_M, KEY_COMMA, KEY_PERIOD, KEY_SLASH)
+				.key(KEY_RSHIFT, size == Size.SEVENTY_FIVE ? 1.75F : 2.75F);
+		Row row5 = new Row(caps, layout, 0, r5).key(KEY_LCONTROL, 1.25F).key(KEY_LGUI, 1.25F).key(KEY_LALT, 1.25F)
+				.key(KEY_SPACE, 6.25F);
 
 		float keyboardWidth = 15;
 		switch (size) {
 			case FULL -> {
-				row5.key(GLFW_KEY_RIGHT_ALT, 1.25F).key(GLFW_KEY_RIGHT_SUPER, 1.25F).key(GLFW_KEY_MENU, 1.25F).key(GLFW_KEY_RIGHT_CONTROL, 1.25F);
+				row5.key(KEY_RALT, 1.25F).key(KEY_RGUI, 1.25F).key(SDL_SCANCODE_APPLICATION, 1.25F).key(KEY_RCONTROL, 1.25F);
 				float nav = 15.25F;
-				new Row(caps, layout, nav, r1).keys(GLFW_KEY_INSERT, GLFW_KEY_HOME, GLFW_KEY_PAGE_UP);
-				new Row(caps, layout, nav, r2).keys(GLFW_KEY_DELETE, GLFW_KEY_END, GLFW_KEY_PAGE_DOWN);
-				new Row(caps, layout, nav + 1, r4).keys(GLFW_KEY_UP);
-				new Row(caps, layout, nav, r5).keys(GLFW_KEY_LEFT, GLFW_KEY_DOWN, GLFW_KEY_RIGHT);
+				new Row(caps, layout, nav, r1).keys(KEY_INSERT, KEY_HOME, KEY_PAGEUP);
+				new Row(caps, layout, nav, r2).keys(KEY_DELETE, KEY_END, KEY_PAGEDOWN);
+				new Row(caps, layout, nav + 1, r4).keys(KEY_UP);
+				new Row(caps, layout, nav, r5).keys(KEY_LEFT, KEY_DOWN, KEY_RIGHT);
 				float pad = nav + 3.25F;
-				new Row(caps, layout, pad, r1).keys(GLFW_KEY_NUM_LOCK, GLFW_KEY_KP_DIVIDE, GLFW_KEY_KP_MULTIPLY, GLFW_KEY_KP_SUBTRACT);
-				new Row(caps, layout, pad, r2).keys(GLFW_KEY_KP_7, GLFW_KEY_KP_8, GLFW_KEY_KP_9);
-				new Row(caps, layout, pad, r3).keys(GLFW_KEY_KP_4, GLFW_KEY_KP_5, GLFW_KEY_KP_6);
-				new Row(caps, layout, pad, r4).keys(GLFW_KEY_KP_1, GLFW_KEY_KP_2, GLFW_KEY_KP_3);
-				new Row(caps, layout, pad, r5).key(GLFW_KEY_KP_0, 2).keys(GLFW_KEY_KP_DECIMAL);
-				caps.add(single(GLFW_KEY_KP_ADD, layout, new Rect(pad + 3, r2, 1, 2)));
-				caps.add(single(GLFW_KEY_KP_ENTER, layout, new Rect(pad + 3, r4, 1, 2)));
+				new Row(caps, layout, pad, r1).keys(KEY_NUMLOCK, SDL_SCANCODE_KP_DIVIDE, KEY_MULTIPLY, SDL_SCANCODE_KP_MINUS);
+				new Row(caps, layout, pad, r2).keys(KEY_NUMPAD7, KEY_NUMPAD8, KEY_NUMPAD9);
+				new Row(caps, layout, pad, r3).keys(KEY_NUMPAD4, KEY_NUMPAD5, KEY_NUMPAD6);
+				new Row(caps, layout, pad, r4).keys(KEY_NUMPAD1, KEY_NUMPAD2, KEY_NUMPAD3);
+				new Row(caps, layout, pad, r5).key(KEY_NUMPAD0, 2).keys(SDL_SCANCODE_KP_PERIOD);
+				caps.add(single(KEY_ADD, layout, new Rect(pad + 3, r2, 1, 2)));
+				caps.add(single(KEY_NUMPADENTER, layout, new Rect(pad + 3, r4, 1, 2)));
 				keyboardWidth = pad + 4;
 			}
 			case SEVENTY_FIVE -> {
-				row5.keys(GLFW_KEY_RIGHT_ALT).fn(1).keys(GLFW_KEY_RIGHT_CONTROL, GLFW_KEY_LEFT, GLFW_KEY_DOWN, GLFW_KEY_RIGHT);
-				new Row(caps, layout, 15, r1).keys(GLFW_KEY_HOME);
-				new Row(caps, layout, 15, r2).keys(GLFW_KEY_PAGE_UP);
-				new Row(caps, layout, 15, r3).keys(GLFW_KEY_PAGE_DOWN);
-				new Row(caps, layout, 14, r4).keys(GLFW_KEY_UP, GLFW_KEY_END);
+				row5.keys(KEY_RALT).fn(1).keys(KEY_RCONTROL, KEY_LEFT, KEY_DOWN, KEY_RIGHT);
+				new Row(caps, layout, 15, r1).keys(KEY_HOME);
+				new Row(caps, layout, 15, r2).keys(KEY_PAGEUP);
+				new Row(caps, layout, 15, r3).keys(KEY_PAGEDOWN);
+				new Row(caps, layout, 14, r4).keys(KEY_UP, KEY_END);
 				keyboardWidth = 16;
 			}
-			case SIXTY -> row5.key(GLFW_KEY_RIGHT_ALT, 1.25F).fn(1.25F).key(GLFW_KEY_MENU, 1.25F).key(GLFW_KEY_RIGHT_CONTROL, 1.25F);
+			case SIXTY -> row5.key(KEY_RALT, 1.25F).fn(1.25F).key(SDL_SCANCODE_APPLICATION, 1.25F).key(KEY_RCONTROL, 1.25F);
 		}
 		float keyboardHeight = r5 + 1;
 
 		float mx = keyboardWidth + MOUSE_GAP;
 		float mouseHeight = Math.min(MOUSE_HEIGHT, keyboardHeight);
 		float my = (keyboardHeight - mouseHeight) / 2;
-		caps.add(mouse(GLFW_MOUSE_BUTTON_LEFT, "LMB", new Rect(mx, my, 0.95F, 1.5F)));
-		caps.add(mouse(GLFW_MOUSE_BUTTON_MIDDLE, "MMB", new Rect(mx + 0.95F, my + 0.3F, 0.3F, 0.75F)));
-		caps.add(mouse(GLFW_MOUSE_BUTTON_RIGHT, "RMB", new Rect(mx + 1.25F, my, 0.95F, 1.5F)));
-		caps.add(mouse(GLFW_MOUSE_BUTTON_5, "M5", new Rect(mx, my + 1.75F, 0.4F, 0.6F)));
-		caps.add(mouse(GLFW_MOUSE_BUTTON_4, "M4", new Rect(mx, my + 2.4F, 0.4F, 0.6F)));
+		caps.add(mouse(MOUSE_BUTTON_LEFT, "LMB", new Rect(mx, my, 0.95F, 1.5F)));
+		caps.add(mouse(MOUSE_BUTTON_MIDDLE, "MMB", new Rect(mx + 0.95F, my + 0.3F, 0.3F, 0.75F)));
+		caps.add(mouse(MOUSE_BUTTON_RIGHT, "RMB", new Rect(mx + 1.25F, my, 0.95F, 1.5F)));
+		caps.add(mouse(MOUSE_BUTTON_5, "M5", new Rect(mx, my + 1.75F, 0.4F, 0.6F)));
+		caps.add(mouse(MOUSE_BUTTON_4, "M4", new Rect(mx, my + 2.4F, 0.4F, 0.6F)));
 
 		return new Board(caps, new Rect(0, 0, keyboardWidth, keyboardHeight), new Rect(mx, my, MOUSE_WIDTH, mouseHeight),
 				mx + MOUSE_WIDTH, keyboardHeight);

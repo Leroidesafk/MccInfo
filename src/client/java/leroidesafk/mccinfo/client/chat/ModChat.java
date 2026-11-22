@@ -306,7 +306,7 @@ public final class ModChat {
 		}
 		// Ignore repeated clicks
 		long now = System.currentTimeMillis();
-		boolean pressed = org.lwjgl.glfw.GLFW.glfwGetMouseButton(Minecraft.getInstance().getWindow().handle(), org.lwjgl.glfw.GLFW.GLFW_MOUSE_BUTTON_LEFT) == org.lwjgl.glfw.GLFW.GLFW_PRESS;
+		boolean pressed = Minecraft.getInstance().mouseHandler.isLeftPressed();
 		if (!pressed || now - lastToggle < TOGGLE_DEBOUNCE_MILLIS) {
 			Mccinfo.LOGGER.info("MccInfo chat: repeated click ignored");
 			return true;

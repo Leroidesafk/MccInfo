@@ -20,7 +20,7 @@ import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.network.chat.Component;
 import net.minecraft.util.FormattedCharSequence;
 import net.minecraft.util.Util;
-import org.lwjgl.glfw.GLFW;
+import com.mojang.blaze3d.platform.InputConstants;
 
 import java.util.List;
 
@@ -196,7 +196,7 @@ public final class PatchNoteToast {
 		if (!covers(event.x(), event.y())) {
 			return false;
 		}
-		if (slide < 1.0F || event.button() != GLFW.GLFW_MOUSE_BUTTON_LEFT) {
+		if (slide < 1.0F || event.button() != InputConstants.MOUSE_BUTTON_LEFT) {
 			return true;
 		}
 		if (view.contains(event.x(), event.y())) {

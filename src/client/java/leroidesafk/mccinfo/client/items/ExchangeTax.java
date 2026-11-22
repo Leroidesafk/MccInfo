@@ -18,7 +18,7 @@ import net.minecraft.client.gui.screens.inventory.AnvilScreen;
 import net.minecraft.client.gui.screens.inventory.ContainerScreen;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.Container;
-import org.lwjgl.glfw.GLFW;
+import com.mojang.blaze3d.platform.InputConstants;
 
 import java.util.Locale;
 import java.util.regex.Matcher;
@@ -155,10 +155,10 @@ public final class ExchangeTax {
 		});
 		// Keys go to the box, Enter or Tab back to the price
 		ScreenKeyboardEvents.allowKeyPress(screen).register((current, event) -> {
-			if (!net.isFocused() || event.key() == GLFW.GLFW_KEY_ESCAPE) {
+			if (!net.isFocused() || event.key() == InputConstants.KEY_ESCAPE) {
 				return true;
 			}
-			if (event.key() == GLFW.GLFW_KEY_ENTER || event.key() == GLFW.GLFW_KEY_KP_ENTER || event.key() == GLFW.GLFW_KEY_TAB) {
+			if (event.key() == InputConstants.KEY_RETURN || event.key() == InputConstants.KEY_NUMPADENTER || event.key() == InputConstants.KEY_TAB) {
 				unfocus(current, net);
 				current.setFocused(price);
 				return false;

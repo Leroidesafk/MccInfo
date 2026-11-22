@@ -40,7 +40,7 @@ import net.minecraft.util.Util;
 import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
-import org.lwjgl.glfw.GLFW;
+import com.mojang.blaze3d.platform.InputConstants;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -462,10 +462,10 @@ public final class NeuItems {
 			ScreenMouseEvents.allowMouseDrag(screen).register((current, event, dragX, dragY) -> !CosmeticPreview.drag(dragX, dragY));
 			ScreenMouseEvents.allowMouseRelease(screen).register((current, event) -> !CosmeticPreview.stopDrag());
 			ScreenKeyboardEvents.allowKeyPress(screen).register((current, event) -> {
-				if (!search.visible || !search.isFocused() || event.key() == GLFW.GLFW_KEY_ESCAPE) {
+				if (!search.visible || !search.isFocused() || event.key() == InputConstants.KEY_ESCAPE) {
 					return true;
 				}
-				if (event.key() == GLFW.GLFW_KEY_ENTER || event.key() == GLFW.GLFW_KEY_KP_ENTER) {
+				if (event.key() == InputConstants.KEY_RETURN || event.key() == InputConstants.KEY_NUMPADENTER) {
 					search.setFocused(false);
 					if (current.getFocused() == search) {
 						current.setFocused(null);
@@ -481,7 +481,7 @@ public final class NeuItems {
 	// Recipe Mode click on an item
 	private static boolean recipeClick(Screen screen, MouseButtonEvent event) {
 		if (!ModConfig.get().mccJei || ITEMS.isEmpty() || !PrivateKeys.RECIPE_MODE.held()
-				|| (event.button() != GLFW.GLFW_MOUSE_BUTTON_LEFT && event.button() != GLFW.GLFW_MOUSE_BUTTON_RIGHT)) {
+				|| (event.button() != InputConstants.MOUSE_BUTTON_LEFT && event.button() != InputConstants.MOUSE_BUTTON_RIGHT)) {
 			return false;
 		}
 		Slot slot = ((ContainerHoveredSlotAccessor) screen).mccinfo$getHoveredSlot();
@@ -490,7 +490,7 @@ public final class NeuItems {
 		}
 		String id = idByName(slot.getItem().getHoverName().getString());
 		if (id != null) {
-			NeuCrafts.open(screen, id, event.button() == GLFW.GLFW_MOUSE_BUTTON_LEFT);
+			NeuCrafts.open(screen, id, event.button() == InputConstants.MOUSE_BUTTON_LEFT);
 		}
 		return true;
 	}
@@ -1287,8 +1287,8 @@ public final class NeuItems {
 				return true;
 			} else if (favoriteClick(event)) {
 				toggleFavorite(id);
-			} else if (event.button() == GLFW.GLFW_MOUSE_BUTTON_LEFT || event.button() == GLFW.GLFW_MOUSE_BUTTON_RIGHT) {
-				NeuCrafts.open(screen, id, event.button() == GLFW.GLFW_MOUSE_BUTTON_LEFT);
+			} else if (event.button() == InputConstants.MOUSE_BUTTON_LEFT || event.button() == InputConstants.MOUSE_BUTTON_RIGHT) {
+				NeuCrafts.open(screen, id, event.button() == InputConstants.MOUSE_BUTTON_LEFT);
 			}
 		} else if (layout.previous().contains(event.x(), event.y()) && favoritePage > 0) {
 			favoritePage--;
@@ -1359,8 +1359,8 @@ public final class NeuItems {
 			return true;
 		} else if (index >= 0 && favoriteClick(event)) {
 			toggleFavorite(filtered.get(index).entry().id);
-		} else if (index >= 0 && (event.button() == GLFW.GLFW_MOUSE_BUTTON_LEFT || event.button() == GLFW.GLFW_MOUSE_BUTTON_RIGHT)) {
-			NeuCrafts.open(screen, filtered.get(index).entry().id, event.button() == GLFW.GLFW_MOUSE_BUTTON_LEFT);
+		} else if (index >= 0 && (event.button() == InputConstants.MOUSE_BUTTON_LEFT || event.button() == InputConstants.MOUSE_BUTTON_RIGHT)) {
+			NeuCrafts.open(screen, filtered.get(index).entry().id, event.button() == InputConstants.MOUSE_BUTTON_LEFT);
 		} else if (layout.previous().contains(event.x(), event.y()) && page > 0) {
 			page--;
 			clickSound();

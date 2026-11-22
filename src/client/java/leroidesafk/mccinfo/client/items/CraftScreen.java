@@ -23,7 +23,7 @@ import net.minecraft.world.inventory.MenuType;
 import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.component.ItemLore;
-import org.lwjgl.glfw.GLFW;
+import com.mojang.blaze3d.platform.InputConstants;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -738,15 +738,15 @@ public final class CraftScreen extends ContainerScreen {
 		}
 		NeuNpcs.Npc npc = npc();
 		if (npc != null && onNpc(event.x(), event.y())) {
-			if (event.button() == GLFW.GLFW_MOUSE_BUTTON_LEFT) {
+			if (event.button() == InputConstants.MOUSE_BUTTON_LEFT) {
 				pathTo(npc);
 			}
 			return true;
 		}
 		String result = this.crafts.get(this.index).result();
 		if (result != null && onResult(event.x(), event.y())) {
-			if (event.button() == GLFW.GLFW_MOUSE_BUTTON_LEFT || event.button() == GLFW.GLFW_MOUSE_BUTTON_RIGHT) {
-				NeuCrafts.open(this, result, event.button() == GLFW.GLFW_MOUSE_BUTTON_LEFT);
+			if (event.button() == InputConstants.MOUSE_BUTTON_LEFT || event.button() == InputConstants.MOUSE_BUTTON_RIGHT) {
+				NeuCrafts.open(this, result, event.button() == InputConstants.MOUSE_BUTTON_LEFT);
 			}
 			return true;
 		}

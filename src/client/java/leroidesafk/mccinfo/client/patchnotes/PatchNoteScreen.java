@@ -5,7 +5,7 @@ import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.network.chat.Component;
-import org.lwjgl.glfw.GLFW;
+import com.mojang.blaze3d.platform.InputConstants;
 
 // Patch notes window, over the menu
 public final class PatchNoteScreen extends Screen implements MenuBackdrop.Overlay {
@@ -51,11 +51,11 @@ public final class PatchNoteScreen extends Screen implements MenuBackdrop.Overla
 
 	@Override
 	public boolean mouseClicked(MouseButtonEvent event, boolean doubleClick) {
-		if (event.button() == GLFW.GLFW_MOUSE_BUTTON_LEFT && (this.panel.startDrag(event.x(), event.y()) || this.panel.click(event.x(), event.y()))) {
+		if (event.button() == InputConstants.MOUSE_BUTTON_LEFT && (this.panel.startDrag(event.x(), event.y()) || this.panel.click(event.x(), event.y()))) {
 			return true;
 		}
 		// Click outside the panel closes it
-		if (event.button() == GLFW.GLFW_MOUSE_BUTTON_LEFT && !this.panel.contains(event.x(), event.y())) {
+		if (event.button() == InputConstants.MOUSE_BUTTON_LEFT && !this.panel.contains(event.x(), event.y())) {
 			this.onClose();
 			return true;
 		}

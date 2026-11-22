@@ -300,7 +300,7 @@ public final class VoiceChat {
 		stack.pushPose();
 		stack.translate(state.nameTagAttachment);
 		stack.translate(0.0, 0.5, 0.0);
-		stack.mulPose(camera.orientation);
+		stack.rotate(camera.orientation);
 		stack.scale(NAMEPLATE_SCALE, -NAMEPLATE_SCALE, NAMEPLATE_SCALE);
 		stack.translate(client.font.width(state.nameTag) / 2 + 2.0F, -1.0F, 0.0F);
 		stack.scale(ICON_SCALE, ICON_SCALE, 1.0F);

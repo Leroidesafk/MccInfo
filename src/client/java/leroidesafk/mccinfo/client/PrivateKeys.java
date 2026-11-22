@@ -9,7 +9,7 @@ import net.minecraft.client.input.KeyEvent;
 import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
-import org.lwjgl.glfw.GLFW;
+import org.lwjgl.sdl.SDLMouse;
 
 import java.util.List;
 import java.util.function.BooleanSupplier;
@@ -66,7 +66,7 @@ public final class PrivateKeys {
 		}
 
 		public boolean matches(KeyEvent event) {
-			return this.key.getType() == InputConstants.Type.KEYSYM && this.key.getValue() == event.key() && event.key() != InputConstants.UNKNOWN.getValue()
+			return this.key.getType() == InputConstants.Type.KEYBOARD && this.key.getValue() == event.key() && event.key() != InputConstants.UNKNOWN.getValue()
 					&& accepts(modifiersOf(event.modifiers(), this.key));
 		}
 
@@ -136,8 +136,8 @@ public final class PrivateKeys {
 
 		private boolean baseDown(Window window) {
 			return switch (this.key.getType()) {
-				case KEYSYM -> this.key.getValue() != InputConstants.UNKNOWN.getValue() && InputConstants.isKeyDown(window, this.key.getValue());
-				case MOUSE -> GLFW.glfwGetMouseButton(window.handle(), this.key.getValue()) == GLFW.GLFW_PRESS;
+				case KEYBOARD -> this.key.getValue() != InputConstants.UNKNOWN.getValue() && InputConstants.isKeyDown(this.key.getValue());
+				case MOUSE -> (SDLMouse.SDL_GetMouseState((java.nio.FloatBuffer) null, null) & (1 << (this.key.getValue() - 1))) != 0;
 				default -> false;
 			};
 		}
@@ -145,7 +145,7 @@ public final class PrivateKeys {
 
 	// Keys of the mod
 	public static final Key RECIPE_MODE =new Key("recipe_mode", "key.mccinfo.recipe_mode", false,
-			() -> Permissions.has(Permissions.Perm.SEE_ITEMS), InputConstants.Type.KEYSYM.getOrCreate(GLFW.GLFW_KEY_R), true).in("utils", null);
+			() -> Permissions.has(Permissions.Perm.SEE_ITEMS), InputConstants.Type.KEYBOARD.getOrCreate(InputConstants.KEY_R), true).in("utils", null);
 	public static final Key COPY_ITEM = new Key("copy_item", "key.mccinfo.copy_item", false,
 			() -> Permissions.has(Permissions.Perm.UTILS), InputConstants.UNKNOWN, true).in("utils", null);
 	public static final Key BADGE_TRACKER = new Key("badge_tracker", "key.mccinfo.badge_tracker", false,
@@ -155,9 +155,9 @@ public final class PrivateKeys {
 	public static final Key MODERATOR_PANEL = new Key("moderator_panel", "key.mccinfo.moderator_panel", false,
 			() -> Permissions.isStaff() && Permissions.isRegistered(), InputConstants.UNKNOWN, true);
 	public static final Key FAVORITE_ITEM = new Key("favorite_item", "key.mccinfo.favorite_item", false,
-			() -> Permissions.has(Permissions.Perm.SEE_ITEMS), InputConstants.Type.MOUSE.getOrCreate(GLFW.GLFW_MOUSE_BUTTON_MIDDLE), GLFW.GLFW_MOD_CONTROL, true).in("utils", null);
+			() -> Permissions.has(Permissions.Perm.SEE_ITEMS), InputConstants.Type.MOUSE.getOrCreate(InputConstants.MOUSE_BUTTON_MIDDLE), InputConstants.MOD_CONTROL, true).in("utils", null);
 	public static final Key LOCK_COSMETIC = new Key("lock_cosmetic", "key.mccinfo.lock_cosmetic", false,
-			() -> Permissions.has(Permissions.Perm.SEE_ITEMS), InputConstants.Type.MOUSE.getOrCreate(GLFW.GLFW_MOUSE_BUTTON_MIDDLE), true).in("utils", null);
+			() -> Permissions.has(Permissions.Perm.SEE_ITEMS), InputConstants.Type.MOUSE.getOrCreate(InputConstants.MOUSE_BUTTON_MIDDLE), true).in("utils", null);
 	public static final List<Key> ALL = new java.util.concurrent.CopyOnWriteArrayList<>(List.of(RECIPE_MODE, COPY_ITEM, FAVORITE_ITEM, LOCK_COSMETIC,
 			FISH_COLLECTION, BADGE_TRACKER, MODERATOR_PANEL));
 
@@ -205,10 +205,10 @@ public final class PrivateKeys {
 		}
 	}
 
-	public static final int MODIFIER_MASK = GLFW.GLFW_MOD_SHIFT | GLFW.GLFW_MOD_CONTROL | GLFW.GLFW_MOD_ALT;
+	public static final int MODIFIER_MASK = InputConstants.MOD_SHIFT | InputConstants.MOD_CONTROL | InputConstants.MOD_ALT;
 	private static final String[] MODIFIER_IDS = {"ctrl", "shift", "alt"};
 	private static final String[] MODIFIER_NAMES = {"Ctrl", "Shift", "Alt"};
-	private static final int[] MODIFIER_BITS = {GLFW.GLFW_MOD_CONTROL, GLFW.GLFW_MOD_SHIFT, GLFW.GLFW_MOD_ALT};
+	private static final int[] MODIFIER_BITS = {InputConstants.MOD_CONTROL, InputConstants.MOD_SHIFT, InputConstants.MOD_ALT};
 
 	public static boolean isModifierKey(int keyCode) {
 		return modifierBit(keyCode) != 0;
@@ -216,28 +216,28 @@ public final class PrivateKeys {
 
 	private static int modifierBit(int keyCode) {
 		return switch (keyCode) {
-			case GLFW.GLFW_KEY_LEFT_CONTROL, GLFW.GLFW_KEY_RIGHT_CONTROL -> GLFW.GLFW_MOD_CONTROL;
-			case GLFW.GLFW_KEY_LEFT_SHIFT, GLFW.GLFW_KEY_RIGHT_SHIFT -> GLFW.GLFW_MOD_SHIFT;
-			case GLFW.GLFW_KEY_LEFT_ALT, GLFW.GLFW_KEY_RIGHT_ALT -> GLFW.GLFW_MOD_ALT;
+			case InputConstants.KEY_LCONTROL, InputConstants.KEY_RCONTROL -> InputConstants.MOD_CONTROL;
+			case InputConstants.KEY_LSHIFT, InputConstants.KEY_RSHIFT -> InputConstants.MOD_SHIFT;
+			case InputConstants.KEY_LALT, InputConstants.KEY_RALT -> InputConstants.MOD_ALT;
 			default -> 0;
 		};
 	}
 
 	public static int modifiersOf(int modifiers, InputConstants.Key key) {
-		int own = key.getType() == InputConstants.Type.KEYSYM ? modifierBit(key.getValue()) : 0;
+		int own = key.getType() == InputConstants.Type.KEYBOARD ? modifierBit(key.getValue()) : 0;
 		return modifiers & MODIFIER_MASK & ~own;
 	}
 
 	public static int heldModifiers(Window window) {
 		int held = 0;
-		if (InputConstants.isKeyDown(window, GLFW.GLFW_KEY_LEFT_CONTROL) || InputConstants.isKeyDown(window, GLFW.GLFW_KEY_RIGHT_CONTROL)) {
-			held |= GLFW.GLFW_MOD_CONTROL;
+		if (InputConstants.isKeyDown(InputConstants.KEY_LCONTROL) || InputConstants.isKeyDown(InputConstants.KEY_RCONTROL)) {
+			held |= InputConstants.MOD_CONTROL;
 		}
-		if (InputConstants.isKeyDown(window, GLFW.GLFW_KEY_LEFT_SHIFT) || InputConstants.isKeyDown(window, GLFW.GLFW_KEY_RIGHT_SHIFT)) {
-			held |= GLFW.GLFW_MOD_SHIFT;
+		if (InputConstants.isKeyDown(InputConstants.KEY_LSHIFT) || InputConstants.isKeyDown(InputConstants.KEY_RSHIFT)) {
+			held |= InputConstants.MOD_SHIFT;
 		}
-		if (InputConstants.isKeyDown(window, GLFW.GLFW_KEY_LEFT_ALT) || InputConstants.isKeyDown(window, GLFW.GLFW_KEY_RIGHT_ALT)) {
-			held |= GLFW.GLFW_MOD_ALT;
+		if (InputConstants.isKeyDown(InputConstants.KEY_LALT) || InputConstants.isKeyDown(InputConstants.KEY_RALT)) {
+			held |= InputConstants.MOD_ALT;
 		}
 		return held;
 	}

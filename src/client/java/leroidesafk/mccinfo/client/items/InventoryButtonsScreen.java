@@ -16,7 +16,7 @@ import net.minecraft.resources.Identifier;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
-import org.lwjgl.glfw.GLFW;
+import com.mojang.blaze3d.platform.InputConstants;
 
 import java.util.List;
 
@@ -405,19 +405,19 @@ public final class InventoryButtonsScreen extends Screen {
 		double x = event.x();
 		double y = event.y();
 		if (inPanel(x, y)) {
-			if (event.button() == GLFW.GLFW_MOUSE_BUTTON_LEFT && panelClick(x, y)) {
+			if (event.button() == InputConstants.MOUSE_BUTTON_LEFT && panelClick(x, y)) {
 				NeuItems.clickSound();
 				return true;
 			}
 			super.mouseClicked(event, doubleClick);
 			return true;
 		}
-		if (event.button() == GLFW.GLFW_MOUSE_BUTTON_LEFT && columnsClick(x, y)) {
+		if (event.button() == InputConstants.MOUSE_BUTTON_LEFT && columnsClick(x, y)) {
 			NeuItems.clickSound();
 			return true;
 		}
 		int slot = slotAt(x, y);
-		if (slot >= 0 && event.button() == GLFW.GLFW_MOUSE_BUTTON_LEFT) {
+		if (slot >= 0 && event.button() == InputConstants.MOUSE_BUTTON_LEFT) {
 			if (slot != this.editing) {
 				open(slot);
 			}
@@ -443,7 +443,7 @@ public final class InventoryButtonsScreen extends Screen {
 
 	@Override
 	public boolean keyPressed(KeyEvent event) {
-		if (event.key() == GLFW.GLFW_KEY_ESCAPE && this.editing >= 0) {
+		if (event.key() == InputConstants.KEY_ESCAPE && this.editing >= 0) {
 			closePanel();
 			return true;
 		}

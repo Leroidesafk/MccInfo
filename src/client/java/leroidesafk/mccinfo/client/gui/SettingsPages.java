@@ -188,7 +188,7 @@ public final class SettingsPages {
 		};
 		List<SettingsPanel.Card> cards = List.of(SettingsPanel.Card.of("api_token_get", text("screen.mccinfo.settings.api_token.get"),
 				text("screen.mccinfo.settings.api_token.get.description"),
-				new SettingsPanel.Action(() -> text("screen.mccinfo.settings.open"), KEY_WIDTH, () -> Util.getPlatform().openUri(NOXCREW_ACCOUNT_URL))),
+				new SettingsPanel.Action(() -> text("screen.mccinfo.settings.open"), KEY_WIDTH, () -> com.mojang.blaze3d.Blaze3D.openUri(java.net.URI.create(NOXCREW_ACCOUNT_URL)))),
 				SettingsPanel.Card.of("api_token",
 				text(status),
 				text("screen.mccinfo.settings.api_token.description"),
@@ -742,7 +742,7 @@ public final class SettingsPages {
 			voice.add(SettingsPanel.Card.warning("voice_chat_missing", text("screen.mccinfo.settings.voice_chat_missing"),
 					text("screen.mccinfo.settings.voice_chat_missing.description"),
 					new SettingsPanel.Action(() -> text("screen.mccinfo.settings.voice_chat_missing.download"), 0,
-							() -> Util.getPlatform().openUri(SVC_URL + SharedConstants.getCurrentVersion().id() + "&l=fabric"))));
+							() -> com.mojang.blaze3d.Blaze3D.openUri(java.net.URI.create(SVC_URL + SharedConstants.getCurrentVersion().id() + "&l=fabric")))));
 		} else {
 			if (VoiceAdmin.disabled() && Permissions.isAdmin()) {
 				voice.add(SettingsPanel.Card.warning("voice_chat_off", text("screen.mccinfo.settings.voice_chat_off"),

@@ -64,9 +64,10 @@ public final class EmoteSound extends AbstractTickableSoundInstance {
 	}
 
 	@Override
-	public WeighedSoundEvents resolve(SoundManager soundManager) {
+	public WeighedSoundEvents getOrResolve(SoundManager soundManager) {
 		this.sound = new Sound(this.file, random -> 1.0F, random -> 1.0F, 1, Sound.Type.FILE, true, false, ATTENUATION);
-		return new WeighedSoundEvents(this.identifier, null);
+		this.soundEvent = new WeighedSoundEvents(this.identifier, null);
+		return this.soundEvent;
 	}
 
 	@Override

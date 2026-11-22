@@ -13,7 +13,7 @@ import net.minecraft.network.chat.Style;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.util.FormattedCharSequence;
 import net.minecraft.util.Mth;
-import org.lwjgl.glfw.GLFW;
+import org.lwjgl.sdl.SDLVideo;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -100,7 +100,7 @@ public final class ChatPing {
 			client.getSoundManager().play(SimpleSoundInstance.forUI(SoundEvents.EXPERIENCE_ORB_PICKUP, SOUND_PITCH));
 		}
 		if (ModConfig.get().pingFlash && !client.getWindow().isFocused()) {
-			GLFW.glfwRequestWindowAttention(client.getWindow().handle());
+			SDLVideo.SDL_FlashWindow(client.getWindow().handle(), SDLVideo.SDL_FLASH_UNTIL_FOCUSED);
 		}
 		return rebuilt;
 	}

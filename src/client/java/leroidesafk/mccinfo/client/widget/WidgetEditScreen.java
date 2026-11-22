@@ -18,7 +18,7 @@ import net.minecraft.resources.Identifier;
 import net.minecraft.util.FormattedCharSequence;
 import net.minecraft.util.Mth;
 import net.minecraft.util.Util;
-import org.lwjgl.glfw.GLFW;
+import com.mojang.blaze3d.platform.InputConstants;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -715,7 +715,7 @@ public final class WidgetEditScreen extends Screen implements MenuBackdrop.Overl
 	}
 
 	private boolean redeemClicked(MouseButtonEvent event, double x, double y, boolean doubleClick) {
-		if (event.button() != GLFW.GLFW_MOUSE_BUTTON_LEFT) {
+		if (event.button() != InputConstants.MOUSE_BUTTON_LEFT) {
 			return true;
 		}
 		int inputY = dialogTop() + DIALOG_INPUT_Y;
@@ -749,7 +749,7 @@ public final class WidgetEditScreen extends Screen implements MenuBackdrop.Overl
 				closeRedeem();
 				return true;
 			}
-			if (event.key() == GLFW.GLFW_KEY_ENTER || event.key() == GLFW.GLFW_KEY_KP_ENTER) {
+			if (event.key() == InputConstants.KEY_RETURN || event.key() == InputConstants.KEY_NUMPADENTER) {
 				submitRedeem();
 				return true;
 			}
@@ -922,7 +922,7 @@ public final class WidgetEditScreen extends Screen implements MenuBackdrop.Overl
 			return true;
 		}
 		this.setFocused(null);
-		if (event.button() == GLFW.GLFW_MOUSE_BUTTON_LEFT && this.maxScroll > 0 && x >= this.listRight - SCROLLBAR_GRAB
+		if (event.button() == InputConstants.MOUSE_BUTTON_LEFT && this.maxScroll > 0 && x >= this.listRight - SCROLLBAR_GRAB
 				&& x < this.listRight + SCROLLBAR_WIDTH + SCROLLBAR_GRAB && y >= viewTop() && y < viewBottom()) {
 			int thumbY = thumbY();
 			int thumbHeight = thumbHeight();
@@ -931,12 +931,12 @@ public final class WidgetEditScreen extends Screen implements MenuBackdrop.Overl
 			dragScrollbar(y);
 			return true;
 		}
-		if (event.button() == GLFW.GLFW_MOUSE_BUTTON_LEFT && inside(x, y, redeemX(), searchY(), redeemWidth(), SEARCH_HEIGHT)) {
+		if (event.button() == InputConstants.MOUSE_BUTTON_LEFT && inside(x, y, redeemX(), searchY(), redeemWidth(), SEARCH_HEIGHT)) {
 			NeuItems.clickSound();
 			openRedeem();
 			return true;
 		}
-		if (event.button() == GLFW.GLFW_MOUSE_BUTTON_RIGHT) {
+		if (event.button() == InputConstants.MOUSE_BUTTON_RIGHT) {
 			int slot = slotAt(x, y);
 			if (slot >= 0 && usable(wheel().get(slot))) {
 				NeuItems.clickSound();
@@ -945,7 +945,7 @@ public final class WidgetEditScreen extends Screen implements MenuBackdrop.Overl
 			}
 			return true;
 		}
-		if (event.button() != GLFW.GLFW_MOUSE_BUTTON_LEFT) {
+		if (event.button() != InputConstants.MOUSE_BUTTON_LEFT) {
 			return super.mouseClicked(event, doubleClick);
 		}
 		if (!inside(x, y, this.left, this.top, this.right - this.left, this.bottom - this.top)) {

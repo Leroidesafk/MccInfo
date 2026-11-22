@@ -18,7 +18,7 @@ import net.minecraft.resources.Identifier;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.component.ResolvableProfile;
-import org.lwjgl.glfw.GLFW;
+import com.mojang.blaze3d.platform.InputConstants;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -109,7 +109,7 @@ public final class InventoryButtons {
 			}
 			ScreenEvents.afterForeground(screen).register((current, graphics, mouseX, mouseY, a) -> extract(current, graphics, mouseX, mouseY));
 			ScreenMouseEvents.allowMouseClick(screen).register((current, event) -> {
-				if (event.button() != GLFW.GLFW_MOUSE_BUTTON_LEFT) {
+				if (event.button() != InputConstants.MOUSE_BUTTON_LEFT) {
 					return true;
 				}
 				ModConfig.InventoryButton button = hovered(current, event.x(), event.y());

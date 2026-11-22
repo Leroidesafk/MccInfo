@@ -17,7 +17,7 @@ import net.minecraft.resources.Identifier;
 import net.minecraft.util.Mth;
 import net.minecraft.util.Util;
 import net.minecraft.world.item.component.ResolvableProfile;
-import org.lwjgl.glfw.GLFW;
+import com.mojang.blaze3d.platform.InputConstants;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -583,7 +583,7 @@ public final class VoiceGroupScreen extends Screen implements MenuBackdrop.Overl
 	// Clicks on the buttons and rows
 	@Override
 	public boolean mouseClicked(MouseButtonEvent event, boolean doubleClick) {
-		if (event.button() != GLFW.GLFW_MOUSE_BUTTON_LEFT) {
+		if (event.button() != InputConstants.MOUSE_BUTTON_LEFT) {
 			return super.mouseClicked(event, doubleClick);
 		}
 		double x = event.x() / this.scale;
@@ -647,11 +647,11 @@ public final class VoiceGroupScreen extends Screen implements MenuBackdrop.Overl
 	@Override
 	public boolean keyPressed(KeyEvent event) {
 		boolean form = this.view == View.CREATE || this.view == View.PASSWORD;
-		if (form && event.key() == GLFW.GLFW_KEY_ESCAPE) {
+		if (form && event.key() == InputConstants.KEY_ESCAPE) {
 			open(View.LIST);
 			return true;
 		}
-		if (event.key() == GLFW.GLFW_KEY_ENTER || event.key() == GLFW.GLFW_KEY_KP_ENTER) {
+		if (event.key() == InputConstants.KEY_RETURN || event.key() == InputConstants.KEY_NUMPADENTER) {
 			if (this.view == View.CREATE) {
 				create();
 				return true;
@@ -661,7 +661,7 @@ public final class VoiceGroupScreen extends Screen implements MenuBackdrop.Overl
 				return true;
 			}
 		}
-		if (form && event.key() == GLFW.GLFW_KEY_TAB) {
+		if (form && event.key() == InputConstants.KEY_TAB) {
 			EditBox next = this.view == View.CREATE ? (this.getFocused() == this.name ? this.password : this.name) : this.joinPassword;
 			this.setFocused(next);
 			return true;

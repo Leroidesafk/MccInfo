@@ -1,10 +1,10 @@
 package leroidesafk.mccinfo.client.emote;
 
-import com.mojang.blaze3d.pipeline.ColorTargetState;
-import com.mojang.blaze3d.pipeline.DepthStencilState;
-import com.mojang.blaze3d.pipeline.BlendFunction;
-import com.mojang.blaze3d.pipeline.RenderPipeline;
-import com.mojang.blaze3d.platform.CompareOp;
+import com.mojang.renderpearl.api.pipeline.ColorTargetState;
+import com.mojang.renderpearl.api.pipeline.DepthStencilState;
+import com.mojang.renderpearl.api.pipeline.BlendFunction;
+import com.mojang.renderpearl.api.pipeline.RenderPipeline;
+import com.mojang.renderpearl.api.pipeline.CompareOp;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.QuadInstance;
 import leroidesafk.mccinfo.Mccinfo;
@@ -29,8 +29,9 @@ import net.minecraft.client.renderer.rendertype.RenderType;
 import net.minecraft.client.renderer.state.level.CameraRenderState;
 import net.minecraft.client.renderer.state.level.QuadParticleRenderState;
 import net.minecraft.client.renderer.texture.OverlayTexture;
-import net.minecraft.client.renderer.texture.TextureAtlasSprite;
+import net.minecraft.client.renderer.texture.UvMapping;
 import net.minecraft.client.resources.model.geometry.BakedQuad;
+import net.minecraft.client.resources.model.geometry.ItemQuads;
 import net.minecraft.client.renderer.gizmos.DrawableGizmoPrimitives;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
@@ -169,18 +170,23 @@ final class EmoteMirage {
 
 		@Override
 		public <S> void submitModel(Model<? super S> model, S state, PoseStack poseStack, RenderType renderType, int lightCoords, int overlayCoords,
-				int tintedColor, @Nullable TextureAtlasSprite sprite, int outlineColor, ModelFeatureRenderer.@Nullable CrumblingOverlay crumblingOverlay) {
+				int tintedColor, @Nullable UvMapping uvMapping, int outlineColor) {
 			RenderType ghost = convert(renderType);
 			if (ghost != null) {
-				this.target.submitModel(model, state, poseStack, ghost, lightCoords, OverlayTexture.NO_OVERLAY, fade(tintedColor, this.alpha), sprite, 0, null);
+				this.target.submitModel(model, state, poseStack, ghost, lightCoords, OverlayTexture.NO_OVERLAY, fade(tintedColor, this.alpha), uvMapping, 0);
 			}
 		}
 
 		@Override
+		public <S> void submitCrumblingOverlay(Model<? super S> model, S state, PoseStack poseStack, RenderType renderType, int lightCoords, int overlayCoords,
+				int tintedColor, ModelFeatureRenderer.CrumblingOverlay crumblingOverlay) {
+		}
+
+		@Override
 		public void submitItem(PoseStack poseStack, ItemDisplayContext displayContext, int lightCoords, int overlayCoords, int outlineColor, int[] tintLayers,
-				List<BakedQuad> quads, ItemStackRenderState.FoilType foilType) {
+				ItemQuads quads, ItemStackRenderState.FoilType foilType) {
 			Map<Identifier, List<BakedQuad>> byAtlas = new LinkedHashMap<>();
-			for (BakedQuad quad : quads) {
+			for (BakedQuad quad : quads.all()) {
 				byAtlas.computeIfAbsent(quad.materialInfo().sprite().atlasLocation(), atlas -> new ArrayList<>()).add(quad);
 			}
 			int color = fade(-1, this.alpha);
@@ -217,6 +223,11 @@ final class EmoteMirage {
 		}
 
 		@Override
+		public void submitTextBackground(PoseStack poseStack, float x, float y, float width, float height, int color, Font.DisplayMode displayMode,
+				int lightCoords) {
+		}
+
+		@Override
 		public void submitFlame(PoseStack poseStack, EntityRenderState renderState, Quaternionf rotation) {
 		}
 
@@ -234,7 +245,7 @@ final class EmoteMirage {
 		}
 
 		@Override
-		public void submitBreakingBlockModel(PoseStack poseStack, List<BlockStateModelPart> parts, int progress) {
+		public void submitBreakingBlockModel(PoseStack poseStack, List<BlockStateModelPart> parts, int progress, boolean flag) {
 		}
 
 		@Override

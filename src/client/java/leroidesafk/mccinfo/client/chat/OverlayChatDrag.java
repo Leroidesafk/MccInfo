@@ -11,7 +11,7 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.screens.ChatScreen;
 import net.minecraft.client.input.MouseButtonEvent;
-import org.lwjgl.glfw.GLFW;
+import com.mojang.blaze3d.platform.InputConstants;
 
 public final class OverlayChatDrag {
 	// Box dragged from the chat
@@ -28,7 +28,7 @@ public final class OverlayChatDrag {
 
 	public static boolean mouseClicked(MouseButtonEvent event) {
 		Minecraft client = Minecraft.getInstance();
-		if (event.button() != GLFW.GLFW_MOUSE_BUTTON_LEFT) {
+		if (event.button() != InputConstants.MOUSE_BUTTON_LEFT) {
 			return false;
 		}
 		int screenWidth = client.getWindow().getGuiScaledWidth();
@@ -72,7 +72,7 @@ public final class OverlayChatDrag {
 			return;
 		}
 		Minecraft client = Minecraft.getInstance();
-		boolean leftPressed = GLFW.glfwGetMouseButton(client.getWindow().handle(), GLFW.GLFW_MOUSE_BUTTON_LEFT) == GLFW.GLFW_PRESS;
+		boolean leftPressed = client.mouseHandler.isLeftPressed();
 		// Drop on release or when the chat closes
 		if (!leftPressed || !(client.gui.screen() instanceof ChatScreen)) {
 			dragged = null;

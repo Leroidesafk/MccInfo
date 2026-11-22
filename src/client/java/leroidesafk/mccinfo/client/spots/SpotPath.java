@@ -10,10 +10,10 @@ import net.minecraft.client.DeltaTracker;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.renderer.BindGroupLayouts;
 import net.minecraft.client.renderer.RenderPipelines;
-import com.mojang.blaze3d.PrimitiveTopology;
-import com.mojang.blaze3d.pipeline.BlendFunction;
-import com.mojang.blaze3d.pipeline.ColorTargetState;
-import com.mojang.blaze3d.pipeline.RenderPipeline;
+import com.mojang.renderpearl.api.pipeline.PrimitiveTopology;
+import com.mojang.renderpearl.api.pipeline.BlendFunction;
+import com.mojang.renderpearl.api.pipeline.ColorTargetState;
+import com.mojang.renderpearl.api.pipeline.RenderPipeline;
 import com.mojang.blaze3d.vertex.DefaultVertexFormat;
 import leroidesafk.mccinfo.client.mixin.accessor.RenderTypeAccessor;
 import net.minecraft.client.renderer.rendertype.RenderSetup;
@@ -109,7 +109,8 @@ public final class SpotPath {
 	// Path seen through blocks
 	private static final RenderPipeline SEE_THROUGH_PIPELINE = RenderPipeline.builder()
 			.withBindGroupLayout(BindGroupLayouts.GLOBALS)
-			.withBindGroupLayout(BindGroupLayouts.MATRICES_PROJECTION)
+			.withBindGroupLayout(BindGroupLayouts.PROJECTION)
+			.withBindGroupLayout(BindGroupLayouts.DYNAMIC_TRANSFORMS)
 			.withLocation(Mccinfo.id("pipeline/path_see_through"))
 			.withVertexShader("core/position_color")
 			.withFragmentShader("core/position_color")

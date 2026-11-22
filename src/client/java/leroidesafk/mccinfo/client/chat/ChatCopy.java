@@ -17,7 +17,7 @@ import net.minecraft.network.chat.Style;
 import net.minecraft.util.Mth;
 import org.joml.Matrix3x2f;
 import org.joml.Vector2f;
-import org.lwjgl.glfw.GLFW;
+import com.mojang.blaze3d.platform.InputConstants;
 
 import java.util.Locale;
 import java.util.regex.Pattern;
@@ -104,7 +104,7 @@ public final class ChatCopy {
 
 	public static boolean mouseClicked(MouseButtonEvent event) {
 		Minecraft client = Minecraft.getInstance();
-		if (event.button() != GLFW.GLFW_MOUSE_BUTTON_RIGHT || !client.hasControlDown() || !enabled() || hovered == null) {
+		if (event.button() != InputConstants.MOUSE_BUTTON_RIGHT || !client.hasControlDown() || !enabled() || hovered == null) {
 			return false;
 		}
 		String text = text(hovered);

@@ -26,7 +26,6 @@ import net.minecraft.client.input.KeyEvent;
 import leroidesafk.mccinfo.client.PrivateKeys;
 import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.network.chat.Component;
-import org.lwjgl.glfw.GLFW;
 
 import java.util.List;
 
@@ -34,8 +33,8 @@ public final class EventsScreen extends Screen {
 	// Key that opens the menu
 	public static final KeyMapping OPEN_SCREEN = new KeyMapping(
 			"key.mccinfo.open_events",
-			InputConstants.Type.KEYSYM,
-			GLFW.GLFW_KEY_H,
+			InputConstants.Type.KEYBOARD,
+			InputConstants.KEY_H,
 			ModKeyCategory.MAIN
 	);
 
@@ -185,7 +184,7 @@ public final class EventsScreen extends Screen {
 	private static void addUrl(List<SettingsPanel.Link> links, String name, int icon, String link) {
 		String url = Links.get(link);
 		if (url != null) {
-			links.add(new SettingsPanel.Link(Component.translatable(name), icon, () -> net.minecraft.util.Util.getPlatform().openUri(url)));
+			links.add(new SettingsPanel.Link(Component.translatable(name), icon, () -> com.mojang.blaze3d.Blaze3D.openUri(java.net.URI.create(url))));
 		}
 	}
 
@@ -462,7 +461,7 @@ public final class EventsScreen extends Screen {
 		}
 		double virtualX = event.x() / scale();
 		double virtualY = event.y() / scale();
-		Tab clickedTab = event.button() == GLFW.GLFW_MOUSE_BUTTON_LEFT ? tabAt(virtualX, virtualY) : null;
+		Tab clickedTab = event.button() == InputConstants.MOUSE_BUTTON_LEFT ? tabAt(virtualX, virtualY) : null;
 		if (clickedTab != null) {
 			if (clickedTab != this.tab) {
 				NeuItems.clickSound();
@@ -482,17 +481,17 @@ public final class EventsScreen extends Screen {
 				return true;
 			}
 			this.setFocused(null);
-			return event.button() == GLFW.GLFW_MOUSE_BUTTON_LEFT && this.settings.mouseClicked(virtualX, virtualY);
+			return event.button() == InputConstants.MOUSE_BUTTON_LEFT && this.settings.mouseClicked(virtualX, virtualY);
 		}
 		if (super.mouseClicked(event, doubleClick)) {
 			return true;
 		}
-		if (event.button() == GLFW.GLFW_MOUSE_BUTTON_LEFT && overResetButton(event.x() / scale(), event.y() / scale())) {
+		if (event.button() == InputConstants.MOUSE_BUTTON_LEFT && overResetButton(event.x() / scale(), event.y() / scale())) {
 			NeuItems.clickSound();
 			resetPositions();
 			return true;
 		}
-		if (event.button() != GLFW.GLFW_MOUSE_BUTTON_LEFT) {
+		if (event.button() != InputConstants.MOUSE_BUTTON_LEFT) {
 			return false;
 		}
 		for (MovableOverlay overlay : OVERLAYS) {
@@ -533,7 +532,7 @@ public final class EventsScreen extends Screen {
 	@Override
 	public boolean keyPressed(KeyEvent event) {
 		if (this.tab == Tab.SETTINGS && this.pages.listening()) {
-			if (event.key() == GLFW.GLFW_KEY_ESCAPE) {
+			if (event.key() == InputConstants.KEY_ESCAPE) {
 				this.pages.bind(InputConstants.UNKNOWN);
 			} else if (!PrivateKeys.isModifierKey(event.key())) {
 				this.pages.bind(InputConstants.getKey(event), event.modifiers());
@@ -544,7 +543,7 @@ public final class EventsScreen extends Screen {
 			return true;
 		}
 		if (this.tab == Tab.SETTINGS && this.getFocused() instanceof EditBox box && this.pages.footerInputs().contains(box)
-				&& (event.key() == GLFW.GLFW_KEY_ENTER || event.key() == GLFW.GLFW_KEY_KP_ENTER) && this.pages.submitFooter(box)) {
+				&& (event.key() == InputConstants.KEY_RETURN || event.key() == InputConstants.KEY_NUMPADENTER) && this.pages.submitFooter(box)) {
 			return true;
 		}
 		return super.keyPressed(event);

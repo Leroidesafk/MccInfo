@@ -6,7 +6,6 @@ import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.input.KeyEvent;
 import net.minecraft.network.chat.Component;
-import org.lwjgl.glfw.GLFW;
 
 import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
@@ -424,7 +423,7 @@ public final class VoiceSettings {
 			});
 			Object test = micTestClass.getConstructor(int.class, int.class, boolean.class, micListenerClass).newInstance(0, 0, false, listener);
 			micTest = test;
-			micPress.invoke(test, new KeyEvent(GLFW.GLFW_KEY_ENTER, 0, 0));
+			micPress.invoke(test, new KeyEvent(InputConstants.KEY_RETURN, 0, 0));
 		});
 	}
 

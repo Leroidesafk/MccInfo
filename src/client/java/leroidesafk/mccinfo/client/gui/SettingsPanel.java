@@ -85,6 +85,7 @@ public final class SettingsPanel {
 	private static final int ICONS_SIZE = 40;
 	private static final int ICON = 8;
 	private static final int ICONS_PER_ROW = ICONS_SIZE / ICON;
+	// Icon indexes in icons.png
 	static final int ICON_SEARCH = 0;
 	static final int ICON_LINK = 1;
 	static final int ICON_KEYBINDS = 2;
@@ -99,6 +100,7 @@ public final class SettingsPanel {
 	static final int ICON_WIDGETS = 14;
 	static final int ICON_API_TOKEN = 15;
 	static final int ICON_PARKOUR = 19;
+	static final int ICON_DISCORD = 20;
 	static final int NO_ICON = -1;
 	// Cards, controls, search and scroll layout
 	private static final int ICON_GAP = 4;

@@ -18,6 +18,7 @@
 		"parkour.ParkourPacketMixin",
 		"parkour.ParkourMedalGlyphMixin",
 		"items.ContainerSlotIconMixin",
+		"items.ContainerItemAmountMixin",
 		"items.ContainerSlotBlockMixin",
 		"spots.DisplayGlowColorMixin",
 		"items.EffectsInInventoryMixin",

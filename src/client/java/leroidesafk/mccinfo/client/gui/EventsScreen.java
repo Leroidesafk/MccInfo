@@ -12,6 +12,7 @@ import leroidesafk.mccinfo.client.items.NeuItems;
 import leroidesafk.mccinfo.client.patchnotes.PatchNotePanel;
 import leroidesafk.mccinfo.client.patchnotes.PatchNoteScreen;
 import leroidesafk.mccinfo.client.patchnotes.PatchNotes;
+import leroidesafk.mccinfo.client.relay.Links;
 import leroidesafk.mccinfo.client.relay.Permissions;
 import leroidesafk.mccinfo.client.voice.VoiceSettings;
 import com.mojang.blaze3d.platform.InputConstants;
@@ -170,16 +171,22 @@ public final class EventsScreen extends Screen {
 	}
 
 	// Links of the left column
-	private static final String DONATE_URL = "https://paypal.me/Leroidesafk";
-
 	private List<SettingsPanel.Link> links() {
 		List<SettingsPanel.Link> links = new java.util.ArrayList<>();
-		links.add(new SettingsPanel.Link(Component.translatable("screen.mccinfo.donate"), SettingsPanel.ICON_MONEY,
-				() -> net.minecraft.util.Util.getPlatform().openUri(DONATE_URL)));
+		addUrl(links, "screen.mccinfo.donate", SettingsPanel.ICON_MONEY, Links.TIP);
+		addUrl(links, "screen.mccinfo.discord", SettingsPanel.ICON_DISCORD, Links.DISCORD);
 		if (!PatchNotes.all().isEmpty() && !Permissions.isOutdated() && MccIsland.isConnected()) {
 			links.add(new SettingsPanel.Link(Component.translatable("screen.mccinfo.patchnotes.title"), SettingsPanel.ICON_PATCH_NOTES, this::openPatchNotes));
 		}
 		return links;
+	}
+
+	// Link shown only when the relay sent its url
+	private static void addUrl(List<SettingsPanel.Link> links, String name, int icon, String link) {
+		String url = Links.get(link);
+		if (url != null) {
+			links.add(new SettingsPanel.Link(Component.translatable(name), icon, () -> net.minecraft.util.Util.getPlatform().openUri(url)));
+		}
 	}
 
 	private void openPatchNotes() {

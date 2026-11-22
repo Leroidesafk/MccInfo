@@ -35,7 +35,8 @@ public final class SlotIndicators {
 	public static final int LOWEST_PRICE = 6;
 	public static final int COMPLETE = 5;
 
-	// Icon sheet, 3 screen pixels per texture pixel at every GUI scale
+	// Icon sheet, 3 screen pixels per texture pixel at GUI Scale 3
+	private static final int DESIGN_GUI_SCALE = 3;
 	private static final Identifier TEXTURE = Mccinfo.id("textures/gui/ui/infos.png");
 	private static final int ICON_SIZE = 8;
 	private static final int TEXTURE_SIZE = 32;
@@ -75,15 +76,23 @@ public final class SlotIndicators {
 	// Icon sticking out of the top right corner
 	public static void topRight(GuiGraphicsExtractor graphics, Slot slot, int icon) {
 		int guiScale = guiScale();
-		int offset = TOP_RIGHT_OFFSET_TEXELS * TEXEL_PIXELS;
-		draw(graphics, icon, (slot.x + SLOT_SIZE) * guiScale - ICON_SIZE * TEXEL_PIXELS + offset, slot.y * guiScale - offset, guiScale);
+		float texel = texelPixels(TEXEL_PIXELS, guiScale);
+		float offset = TOP_RIGHT_OFFSET_TEXELS * texel;
+		draw(graphics, icon, (slot.x + SLOT_SIZE) * guiScale - ICON_SIZE * texel + offset, slot.y * guiScale - offset, texel, guiScale);
 	}
 
 	// Icon sticking out of the bottom left corner
 	public static void bottomLeft(GuiGraphicsExtractor graphics, Slot slot, int icon) {
 		int guiScale = guiScale();
-		int offset = BOTTOM_LEFT_OFFSET_TEXELS * TEXEL_PIXELS;
-		draw(graphics, icon, slot.x * guiScale - offset, (slot.y + SLOT_SIZE) * guiScale - ICON_SIZE * TEXEL_PIXELS + offset, guiScale);
+		float texel = texelPixels(TEXEL_PIXELS, guiScale);
+		float offset = BOTTOM_LEFT_OFFSET_TEXELS * texel;
+		draw(graphics, icon, slot.x * guiScale - offset, (slot.y + SLOT_SIZE) * guiScale - ICON_SIZE * texel + offset, texel, guiScale);
+	}
+
+	// Texture pixel size, smaller below GUI Scale 3
+	public static float texelPixels(float designPixels, int guiScale) {
+		float pixels = designPixels * Math.min(guiScale, DESIGN_GUI_SCALE) / DESIGN_GUI_SCALE;
+		return pixels >= 1.0F ? Math.round(pixels) : pixels;
 	}
 
 	// Icon at its texture size, for other screens
@@ -95,12 +104,28 @@ public final class SlotIndicators {
 	// Checkmark in the bottom right corner
 	public static void check(GuiGraphicsExtractor graphics, Slot slot) {
 		int guiScale = guiScale();
-		int size = CHECK_TEXTURE_SIZE * CHECK_TEXEL_PIXELS;
+		bottomCorner(graphics, slot, new Sheet(CHECK_TEXTURE, CHECK_TEXTURE_SIZE, CHECK_TEXTURE_SIZE, CHECK_TEXEL_PIXELS), 0, true, 0.0F, guiScale);
+	}
+
+	// Icon of a sheet in a bottom corner
+	public record Sheet(Identifier texture, int size, int iconSize, float designTexel) {
+	}
+
+	public static void bottomCorner(GuiGraphicsExtractor graphics, Slot slot, Sheet sheet, int icon, boolean right) {
+		int guiScale = guiScale();
+		bottomCorner(graphics, slot, sheet, icon, right, BOTTOM_LEFT_OFFSET_TEXELS * texelPixels(TEXEL_PIXELS, guiScale), guiScale);
+	}
+
+	private static void bottomCorner(GuiGraphicsExtractor graphics, Slot slot, Sheet sheet, int icon, boolean right, float overhang, int guiScale) {
+		float texel = texelPixels(sheet.designTexel(), guiScale);
+		int perRow = sheet.size() / sheet.iconSize();
+		float size = sheet.iconSize() * texel;
+		float x = right ? (slot.x + SLOT_SIZE) * guiScale - size + overhang : slot.x * guiScale - overhang;
 		graphics.pose().pushMatrix();
-		graphics.pose().translate(((slot.x + SLOT_SIZE) * guiScale - size) / (float) guiScale, ((slot.y + SLOT_SIZE) * guiScale - size) / (float) guiScale);
-		graphics.pose().scale(CHECK_TEXEL_PIXELS / (float) guiScale, CHECK_TEXEL_PIXELS / (float) guiScale);
-		graphics.blit(RenderPipelines.GUI_TEXTURED, CHECK_TEXTURE, 0, 0, 0.0F, 0.0F, CHECK_TEXTURE_SIZE, CHECK_TEXTURE_SIZE, CHECK_TEXTURE_SIZE,
-				CHECK_TEXTURE_SIZE);
+		graphics.pose().translate(Math.round(x) / (float) guiScale, Math.round((slot.y + SLOT_SIZE) * guiScale - size + overhang) / (float) guiScale);
+		graphics.pose().scale(texel / guiScale, texel / guiScale);
+		graphics.blit(RenderPipelines.GUI_TEXTURED, sheet.texture(), 0, 0, icon % perRow * sheet.iconSize(), icon / perRow * sheet.iconSize(), sheet.iconSize(), sheet.iconSize(),
+				sheet.size(), sheet.size());
 		graphics.pose().popMatrix();
 	}
 
@@ -260,12 +285,12 @@ public final class SlotIndicators {
 	}
 
 	// Icon placed in screen pixels
-	private static void draw(GuiGraphicsExtractor graphics, int icon, int xPixels, int yPixels, int guiScale) {
+	private static void draw(GuiGraphicsExtractor graphics, int icon, float xPixels, float yPixels, float texel, int guiScale) {
 		float u = (icon % ICONS_PER_ROW) * ICON_SIZE;
 		float v = (icon / ICONS_PER_ROW) * ICON_SIZE;
 		graphics.pose().pushMatrix();
-		graphics.pose().translate(xPixels / (float) guiScale, yPixels / (float) guiScale);
-		graphics.pose().scale(TEXEL_PIXELS / (float) guiScale, TEXEL_PIXELS / (float) guiScale);
+		graphics.pose().translate(Math.round(xPixels) / (float) guiScale, Math.round(yPixels) / (float) guiScale);
+		graphics.pose().scale(texel / guiScale, texel / guiScale);
 		graphics.blit(RenderPipelines.GUI_TEXTURED, TEXTURE, 0, 0, u, v, ICON_SIZE, ICON_SIZE, TEXTURE_SIZE, TEXTURE_SIZE);
 		graphics.pose().popMatrix();
 	}

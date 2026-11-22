@@ -22,6 +22,8 @@ import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
+import net.minecraft.client.gui.ComponentPath;
+import net.minecraft.client.gui.navigation.FocusNavigationEvent;
 import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.components.ChatComponent;
 import net.minecraft.client.gui.components.EditBox;
@@ -987,6 +989,12 @@ public final class ModChat {
 
 		@Override
 		protected void updateWidgetNarration(NarrationElementOutput output) {
+		}
+
+		// No focus with the arrow keys
+		@Override
+		public ComponentPath nextFocusPath(FocusNavigationEvent event) {
+			return null;
 		}
 	}
 }

@@ -68,6 +68,8 @@ public final class CosmeticPreview {
 	private static final int DOLL_MAX_HEIGHT = 200;
 	private static final int DOLL_MIN_HEIGHT = 120;
 	private static final int MIN_WIDTH = 58;
+	private static final float MIN_SCALE = 0.4F;
+	private static final int ROUNDING_MARGIN = 2;
 	private static final int SECTION_GAP = 4;
 	// Worn cosmetic slots
 	private static final int SLOT_PITCH = 20;
@@ -132,7 +134,11 @@ public final class CosmeticPreview {
 	}
 
 	// Places of the player, slots and color panel
-	public record Layout(int dollLeft, int dollTop, int dollRight, int dollBottom, int slotsTop, int panelLeft, int panelTop, boolean tools) {
+	public record Layout(int dollLeft, int dollTop, int dollRight, int dollBottom, int slotsTop, int panelLeft, int panelTop, boolean tools, float scale) {
+		private int local(double screen) {
+			return (int) Math.floor(screen / this.scale);
+		}
+
 		private int centerX() {
 			return (this.dollLeft + this.dollRight) / 2;
 		}
@@ -145,7 +151,11 @@ public final class CosmeticPreview {
 			return centerX() - (MAX_SLOTS * SLOT_PITCH - NeuItems.GAP) / 2;
 		}
 
-		boolean blocks(int left, int top, int right, int bottom) {
+		boolean blocks(int screenLeft, int screenTop, int screenRight, int screenBottom) {
+			int left = local(screenLeft);
+			int top = local(screenTop);
+			int right = (int) Math.ceil(screenRight / this.scale);
+			int bottom = (int) Math.ceil(screenBottom / this.scale);
 			if (overlaps(left, top, right, bottom, this.dollLeft, this.dollTop, this.dollRight, this.dollBottom)) {
 				return true;
 			}
@@ -302,14 +312,23 @@ public final class CosmeticPreview {
 		return icon.isEmpty() ? colorItem(chroma.colors().getFirst()) : icon;
 	}
 
-	// Layout in the favorites area
-	static Layout layout(int left, int top, int right, int bottom) {
+	// Layout in the favorites area, scaled down to fit
+	static Layout layout(int screenLeft, int screenTop, int screenRight, int screenBottom) {
+		int tools = SECTION_GAP + NeuItems.SQUARE_SIZE + SECTION_GAP + PANEL_HEIGHT;
+		float scale = Math.min(1.0F, Math.min((float) (screenRight - screenLeft) / MIN_WIDTH,
+				Math.min((float) screenRight / (PANEL_WIDTH / 2 + DOLL_HALF_WIDTH - SHIFT_X), (float) (screenBottom - screenTop) / (DOLL_MIN_HEIGHT + tools + ROUNDING_MARGIN))));
+		if (scale < MIN_SCALE) {
+			return null;
+		}
+		int left = (int) Math.ceil(screenLeft / scale);
+		int top = (int) Math.ceil(screenTop / scale);
+		int right = (int) Math.floor(screenRight / scale);
+		int bottom = (int) Math.floor(screenBottom / scale);
 		if (right - left < MIN_WIDTH) {
 			return null;
 		}
 		int centerX = right - DOLL_HALF_WIDTH + SHIFT_X;
 		int available = bottom - top;
-		int tools = SECTION_GAP + NeuItems.SQUARE_SIZE + SECTION_GAP + PANEL_HEIGHT;
 		int dollHeight = Math.min(DOLL_MAX_HEIGHT, available - tools);
 		boolean withTools = dollHeight >= DOLL_MIN_HEIGHT && centerX - PANEL_WIDTH / 2 >= 0;
 		if (!withTools) {
@@ -323,7 +342,7 @@ public final class CosmeticPreview {
 		int slotsTop = dollTop + dollHeight + SECTION_GAP;
 		int panelTop = slotsTop + NeuItems.SQUARE_SIZE + SECTION_GAP;
 		return new Layout(centerX - DOLL_HALF_WIDTH, dollTop, centerX + DOLL_HALF_WIDTH, dollTop + dollHeight, slotsTop, centerX - PANEL_WIDTH / 2, panelTop,
-				withTools);
+				withTools, scale);
 	}
 
 	static boolean reserved() {
@@ -346,8 +365,8 @@ public final class CosmeticPreview {
 
 	// Clicks on the slots, colors and arrows
 	static boolean click(Layout layout, MouseButtonEvent event) {
-		double x = event.x();
-		double y = event.y();
+		double x = event.x() / layout.scale();
+		double y = event.y() / layout.scale();
 		if (layout.tools() && PrivateKeys.LOCK_COSMETIC.usable() && PrivateKeys.LOCK_COSMETIC.matchesMouse(event)) {
 			for (Worn slot : worn) {
 				if (slot.contains(x, y)) {
@@ -490,23 +509,57 @@ public final class CosmeticPreview {
 		if (type == null || id == null) {
 			return false;
 		}
+		String normal = NeuItems.normalId(id);
 		Locked current = LOCKED.get(type);
-		if (current != null && current.id().equals(id)) {
+		if (current != null && current.id().equals(normal)) {
 			LOCKED.remove(type);
 		} else {
-			LOCKED.put(type, new Locked(id, stack));
+			LOCKED.put(type, new Locked(normal, normalStack(normal, type, stack)));
 			selected = type;
 		}
 		NeuItems.clickSound();
 		return true;
 	}
 
+	// Normal versions from the NEU
+	private static ItemStack normalStack(String normal, Type type, ItemStack fallback) {
+		ItemStack stack = NeuItems.stack(normal);
+		return !stack.isEmpty() && typeOf(stack) == type ? stack : fallback;
+	}
+
+	private static ItemStack normalVersion(ItemStack stack) {
+		Type type = typeOf(stack);
+		return type == null ? stack : normalStack(NeuItems.normalId(idFor(stack)), type, stack);
+	}
+
+	private static ItemStack fromNeu(ItemStack real, Type type) {
+		if (type == Type.HAND) {
+			return real;
+		}
+		String id = NeuItems.idByModel(real.get(DataComponents.ITEM_MODEL));
+		if (id == null && type != Type.BACK) {
+			id = NeuItems.idByName(real.getHoverName().getString());
+		}
+		if (id == null) {
+			return real;
+		}
+		ItemStack neu = normalStack(NeuItems.normalId(id), type, real);
+		DyedItemColor dye = real.get(DataComponents.DYED_COLOR);
+		if (neu == real || dye == null) {
+			return neu;
+		}
+		neu = neu.copy();
+		neu.set(DataComponents.DYED_COLOR, dye);
+		return neu;
+	}
+
 	static boolean isLocked(String id) {
 		if (id == null) {
 			return false;
 		}
+		String normal = NeuItems.normalId(id);
 		for (Locked locked : LOCKED.values()) {
-			if (locked.id().equals(id)) {
+			if (locked.id().equals(normal)) {
 				return true;
 			}
 		}
@@ -530,7 +583,7 @@ public final class CosmeticPreview {
 		LOCKED.forEach((type, locked) -> shown.put(type, locked.stack()));
 		Type hoverType = typeOf(hover);
 		if (hoverType != null) {
-			shown.put(hoverType, hover);
+			shown.put(hoverType, normalVersion(hover));
 		}
 		if (shown.isEmpty()) {
 			return;
@@ -538,7 +591,10 @@ public final class CosmeticPreview {
 		Map<Type, ItemStack> wearing = wearing(player, shown);
 		extractDoll(graphics, player, layout, wearing);
 		if (layout.tools() && reserved) {
+			graphics.pose().pushMatrix();
+			graphics.pose().scale(layout.scale(), layout.scale());
 			extractTools(graphics, layout, wearing, hoverType, mouseX, mouseY);
+			graphics.pose().popMatrix();
 		}
 	}
 
@@ -549,9 +605,7 @@ public final class CosmeticPreview {
 			ItemStack stack = shown.get(type);
 			if (stack == null) {
 				stack = type == Type.BACK ? realBack(player) : player.getItemBySlot(type.slot);
-				if (typeOf(stack) != type) {
-					stack = ItemStack.EMPTY;
-				}
+				stack = typeOf(stack) == type ? fromNeu(stack, type) : ItemStack.EMPTY;
 			}
 			if (stack.isEmpty()) {
 				continue;
@@ -592,17 +646,20 @@ public final class CosmeticPreview {
 			Minecraft.getInstance().getItemModelResolver().updateForLiving(backState, back, ItemDisplayContext.HEAD, player);
 			BACKS.put(state, backState);
 		}
-		int height = layout.dollBottom() - layout.dollTop();
+		float scale = layout.scale();
+		int height = Math.round((layout.dollBottom() - layout.dollTop()) * scale);
 		float size = height / SIZE_DIVIDER;
-		int halfWidth = layout.dollRight() - layout.dollLeft();
-		int x = layout.centerX();
-		int y = Math.round((layout.dollTop() + layout.dollBottom()) / 2.0F + height * SHIFT_Y_RATIO);
+		int halfWidth = Math.round((layout.dollRight() - layout.dollLeft()) * scale);
+		int x = Math.round(layout.centerX() * scale);
+		int y = Math.round((layout.dollTop() + layout.dollBottom()) * scale / 2.0F + height * SHIFT_Y_RATIO);
 		Vector3f translation = rotation.transform(new Vector3f(0.0F, state.boundingBoxHeight / 2.0F, 0.0F)).negate();
 		graphics.entity(state, size, translation, rotation, xRotation, x - halfWidth, y - height, x + halfWidth, y + height);
 	}
 
-	private static void extractTools(GuiGraphicsExtractor graphics, Layout layout, Map<Type, ItemStack> wearing, Type hoverType, int mouseX, int mouseY) {
+	private static void extractTools(GuiGraphicsExtractor graphics, Layout layout, Map<Type, ItemStack> wearing, Type hoverType, int screenX, int screenY) {
 		Font font = Minecraft.getInstance().font;
+		int mouseX = layout.local(screenX);
+		int mouseY = layout.local(screenY);
 		Type current = selected != null && wearing.containsKey(selected) ? selected : hoverType != null && wearing.containsKey(hoverType) ? hoverType : null;
 		if (current == null) {
 			for (Map.Entry<Type, ItemStack> entry : wearing.entrySet()) {
@@ -630,7 +687,7 @@ public final class CosmeticPreview {
 			graphics.item(slot.stack(), slot.x() + 1, slot.y() + 1);
 		}
 		if (hoveredSlot != null) {
-			graphics.setTooltipForNextFrame(font, hoveredSlot.stack(), mouseX, mouseY);
+			graphics.setTooltipForNextFrame(font, hoveredSlot.stack(), screenX, screenY);
 			NeuItems.pointer(graphics);
 		}
 		if (current == null || !paintable(current, wearing.get(current))) {
@@ -638,11 +695,11 @@ public final class CosmeticPreview {
 		}
 		shownColorsFor = current;
 		shownChromas = !current.tintable;
-		extractColors(graphics, font, layout, current, mouseX, mouseY);
+		extractColors(graphics, font, layout, current, mouseX, mouseY, screenX, screenY);
 	}
 
 	// Tints or Chroma Sets
-	private static void extractColors(GuiGraphicsExtractor graphics, Font font, Layout layout, Type type, int mouseX, int mouseY) {
+	private static void extractColors(GuiGraphicsExtractor graphics, Font font, Layout layout, Type type, int mouseX, int mouseY, int screenX, int screenY) {
 		int left = layout.panelLeft();
 		int top = layout.panelTop();
 		graphics.blit(RenderPipelines.GUI_TEXTURED, PANEL, left, top, 0.0F, 0.0F, PANEL_WIDTH, PANEL_HEIGHT, PANEL_WIDTH, PANEL_HEIGHT);
@@ -675,7 +732,7 @@ public final class CosmeticPreview {
 			if (first + slot == hoveredColor) {
 				graphics.fill(x + 1, y + 1, x + COLOR_CELL - 1, y + COLOR_CELL - 1, COLOR_HOVER);
 				if (shownChromas) {
-					graphics.setTooltipForNextFrame(font, icon, mouseX, mouseY);
+					graphics.setTooltipForNextFrame(font, icon, screenX, screenY);
 				}
 			}
 		}
@@ -690,10 +747,10 @@ public final class CosmeticPreview {
 		if (hoveredColor >= 0) {
 			NeuItems.pointer(graphics);
 		} else if (previous && onArrow(localX, localY, PREVIOUS_LEFT)) {
-			graphics.setTooltipForNextFrame(font, Component.literal("Previous Page"), mouseX, mouseY);
+			graphics.setTooltipForNextFrame(font, Component.literal("Previous Page"), screenX, screenY);
 			NeuItems.pointer(graphics);
 		} else if (next && onArrow(localX, localY, NEXT_LEFT)) {
-			graphics.setTooltipForNextFrame(font, Component.literal("Next Page"), mouseX, mouseY);
+			graphics.setTooltipForNextFrame(font, Component.literal("Next Page"), screenX, screenY);
 			NeuItems.pointer(graphics);
 		}
 	}

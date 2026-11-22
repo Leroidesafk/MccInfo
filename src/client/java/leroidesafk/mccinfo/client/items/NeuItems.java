@@ -368,6 +368,11 @@ public final class NeuItems {
 	private static final Set<String> NESTED_GROUPS = new HashSet<>();
 	private static final int MAX_GROUP_DEPTH = 8;
 	private static final Map<String, List<String>> VARIANTS = new java.util.concurrent.ConcurrentHashMap<>();
+	private static final java.util.regex.Pattern STAR_SUFFIX = java.util.regex.Pattern.compile("_\\d+$");
+	private static final Map<String, String> NORMALS = new java.util.concurrent.ConcurrentHashMap<>();
+	private static Map<String, String> modelIndex;
+	private static final String DEFAULT_MODEL = "/default";
+	private static final List<String> COSMETIC_FOLDERS = List.of("/back/", "/hat/", "/hair/", "/accessory/");
 	private static List<Tile> filtered = List.of();
 	private static final Set<String> EXPANDED = new HashSet<>();
 	private static final Set<String> CONTAINERS = new HashSet<>();
@@ -660,6 +665,84 @@ public final class NeuItems {
 		return List.of(id);
 	}
 
+	// Normal version of a variant
+	static String normalId(String id) {
+		if (id == null) {
+			return null;
+		}
+		return NORMALS.computeIfAbsent(id, key -> {
+			for (Group group : GROUPS) {
+				if (group.members().stream().noneMatch(member -> member.entry() != null && member.entry().id.equals(key))) {
+					continue;
+				}
+				if (group.variants()) {
+					return group.id();
+				}
+				java.util.regex.Matcher stars = STAR_SUFFIX.matcher(key);
+				if (stars.find() && variantOf(group.id(), key) && BY_ID.containsKey(group.id() + stars.group())) {
+					return group.id() + stars.group();
+				}
+			}
+			return key;
+		});
+	}
+
+	// Item found by its model
+	static String idByModel(Identifier model) {
+		if (model == null) {
+			return null;
+		}
+		Map<String, String> index = modelIndex;
+		if (index == null) {
+			index = new HashMap<>();
+			for (boolean outdated : new boolean[] {false, true}) {
+				for (boolean main : new boolean[] {true, false}) {
+					for (Entry entry : ITEMS) {
+						Identifier entryModel = entry.outdated == outdated ? modelOf(entry.json) : null;
+						if (entryModel == null) {
+							continue;
+						}
+						String id = normalId(entry.id);
+						index.putIfAbsent(entryModel.toString(), id);
+						String key = cosmeticKey(entryModel);
+						if (key != null && entryModel.getPath().endsWith(DEFAULT_MODEL) == main) {
+							index.putIfAbsent(key, id);
+						}
+					}
+				}
+			}
+			modelIndex = index;
+		}
+		String id = index.get(model.toString());
+		if (id == null) {
+			id = index.get(model + DEFAULT_MODEL);
+		}
+		String key = cosmeticKey(model);
+		return id != null || key == null ? id : index.get(key);
+	}
+
+	private static String cosmeticKey(Identifier model) {
+		String path = model.getPath();
+		for (String folder : COSMETIC_FOLDERS) {
+			int start = path.indexOf(folder);
+			if (start >= 0) {
+				int nameStart = start + folder.length();
+				int nameEnd = path.indexOf('/', nameStart);
+				String name = nameEnd < 0 ? path.substring(nameStart) : path.substring(nameStart, nameEnd);
+				return name.isEmpty() ? null : folder + name;
+			}
+		}
+		return null;
+	}
+
+	private static Identifier modelOf(JsonElement json) {
+		if (json == null || !json.isJsonObject() || !(json.getAsJsonObject().get("components") instanceof JsonObject components)) {
+			return null;
+		}
+		JsonElement model = components.get("minecraft:item_model");
+		return model != null && model.isJsonPrimitive() ? Identifier.tryParse(model.getAsString()) : null;
+	}
+
 	private static boolean variantOf(String groupId, String id) {
 		int slash = id.lastIndexOf('/') + 1;
 		String base = id.startsWith("blueprint_", slash) ? id.substring(0, slash) + id.substring(slash + "blueprint_".length()) : id;
@@ -719,7 +802,16 @@ public final class NeuItems {
 			return first;
 		}
 		List<String> variants = variants(first);
-		return matches.stream().allMatch(entry -> variants.contains(entry.id)) ? first : null;
+		if (!matches.stream().allMatch(entry -> variants.contains(entry.id))) {
+			return null;
+		}
+		String exact = name.strip();
+		for (Entry entry : matches) {
+			if (entry.stack().getHoverName().getString().strip().equals(exact)) {
+				return entry.id;
+			}
+		}
+		return first;
 	}
 
 	public static void clear() {
@@ -731,8 +823,11 @@ public final class NeuItems {
 		GROUPS.clear();
 		GROUP_BY_ID.clear();
 		VARIANTS.clear();
+		NORMALS.clear();
+		modelIndex = null;
 		NESTED_GROUPS.clear();
 		CONTAINERS.clear();
+		BetterItemAmounts.clearMenus();
 		cosmeticDefaults = null;
 		NeuCrafts.clear();
 		filtered = List.of();
@@ -751,6 +846,8 @@ public final class NeuItems {
 			GROUPS.clear();
 			GROUP_BY_ID.clear();
 		VARIANTS.clear();
+		NORMALS.clear();
+		modelIndex = null;
 			NESTED_GROUPS.clear();
 		}
 		if (object.has("items") && object.get("items").isJsonArray()) {
@@ -808,12 +905,17 @@ public final class NeuItems {
 				}
 			}
 		}
+		if (object.has("betterAmounts") && object.get("betterAmounts").isJsonArray()) {
+			BetterItemAmounts.setMenus(object.getAsJsonArray("betterAmounts"));
+		}
 		if (object.has("groups") && object.get("groups").isJsonArray()) {
 			Map<String, Entry> byId = new HashMap<>();
 			ITEMS.forEach(entry -> byId.put(entry.id, entry));
 			GROUPS.clear();
 			GROUP_BY_ID.clear();
 		VARIANTS.clear();
+		NORMALS.clear();
+		modelIndex = null;
 			NESTED_GROUPS.clear();
 			for (JsonElement element : object.getAsJsonArray("groups")) {
 				if (element.isJsonObject()) {
@@ -963,7 +1065,11 @@ public final class NeuItems {
 		return !title.isEmpty() && CONTAINERS.contains(cleanName(title.getHoverName().getString()));
 	}
 
-	private static String cleanName(String name) {
+	static boolean isListedContainer(ItemStack title) {
+		return !title.isEmpty() && CONTAINERS.contains(cleanName(title.getHoverName().getString()));
+	}
+
+	static String cleanName(String name) {
 		return name.replaceAll("[\uE000-\uF8FF]", "").strip().toLowerCase(Locale.ROOT);
 	}
 
@@ -1132,6 +1238,26 @@ public final class NeuItems {
 				&& CosmeticPreview.toggleLock(entry.id, entry.stack());
 	}
 
+	// Middle Click on a group of variants locks its normal version
+	private static boolean lockGroup(Group group, MouseButtonEvent event) {
+		Entry normal = group.variants() ? BY_ID.get(group.id()) : null;
+		if (normal == null || !CosmeticPreview.enabled() || !PrivateKeys.LOCK_COSMETIC.usable() || !PrivateKeys.LOCK_COSMETIC.matchesMouse(event)
+				|| CosmeticPreview.typeOf(normal.stack()) == null) {
+			return false;
+		}
+		if (!expanded(group)) {
+			if (!EXPANDED.remove(group.id())) {
+				EXPANDED.add(group.id());
+			}
+			refilter();
+			if (CosmeticPreview.isLocked(normal.id)) {
+				clickSound();
+				return true;
+			}
+		}
+		return CosmeticPreview.toggleLock(normal.id, normal.stack());
+	}
+
 	// Middle Click on an inventory slot locks the cosmetic
 	private static boolean lockSlot(Screen screen, MouseButtonEvent event) {
 		if (!previewShown(screen) || !PrivateKeys.LOCK_COSMETIC.usable() || !PrivateKeys.LOCK_COSMETIC.matchesMouse(event)) {
@@ -1220,6 +1346,8 @@ public final class NeuItems {
 				refilter();
 				clickSound();
 			}
+		} else if (index >= 0 && filtered.get(index).isGroup() && lockGroup(filtered.get(index).group(), event)) {
+			return true;
 		} else if (index >= 0 && filtered.get(index).isGroup()) {
 			String group = filtered.get(index).group().id();
 			if (!EXPANDED.remove(group)) {
@@ -1395,6 +1523,8 @@ public final class NeuItems {
 			OverlayStyle.fillRounded(graphics, x, y, SQUARE_SIZE, SQUARE_SIZE, background);
 			if (tile != null && !tile.isGroup()) {
 				lockedFrame(graphics, tile.entry().id, x, y);
+			} else if (tile != null && tile.group().variants()) {
+				lockedFrame(graphics, tile.group().id(), x, y);
 			}
 			if (tile != null) {
 				boolean open = tile.isGroup() && expanded(tile.group());
@@ -1513,9 +1643,10 @@ public final class NeuItems {
 	// Item in the corner of a slot, pixel accurate
 	static void extractBadge(GuiGraphicsExtractor graphics, ItemStack stack, float right, float bottom, int zoom) {
 		int guiScale = Math.max(1, Minecraft.getInstance().getWindow().getGuiScale());
-		float scale = (float) zoom / guiScale;
-		float left = (Math.round(right * guiScale) - BADGE_PIXELS * zoom) / (float) guiScale;
-		float top = (Math.round(bottom * guiScale) - BADGE_PIXELS * zoom) / (float) guiScale;
+		float texel = SlotIndicators.texelPixels(zoom, guiScale);
+		float scale = texel / guiScale;
+		float left = (Math.round(right * guiScale) - BADGE_PIXELS * texel) / guiScale;
+		float top = (Math.round(bottom * guiScale) - BADGE_PIXELS * texel) / guiScale;
 		graphics.pose().pushMatrix();
 		graphics.pose().translate(left, top);
 		graphics.pose().scale(scale, scale);

@@ -27,6 +27,7 @@ import net.minecraft.network.chat.Style;
 import net.minecraft.resources.Identifier;
 import net.minecraft.sounds.SoundEvent;
 import net.minecraft.util.Unit;
+import net.minecraft.util.Util;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.item.ItemStack;
@@ -86,6 +87,13 @@ public final class QuestLock {
 	private static final int ICON_COLOR = 0xFFFFFF;
 	private static final int MAX_LENGTH = 200;
 	private static final SoundEvent BLOCKED_SOUND = SoundEvent.createVariableRangeEvent(Identifier.fromNamespaceAndPath(MCC, "ui.click_dead"));
+	private static final int SLOT_SIZE = 16;
+	private static final long REROLL_WAIT_MILLIS = 2000;
+
+	// Last rerolled quest
+	private static Slot rerolledSlot;
+	private static String rerolledKey;
+	private static long rerolledAt;
 
 	// Icon glyphs, unlocked quests and data from the relay
 	private static final Map<String, Glyph> ICON_GLYPHS = new ConcurrentHashMap<>();
@@ -318,13 +326,31 @@ public final class QuestLock {
 		}
 	}
 
-	// Shift-Click blocked on locked quests, Right-Click unlocks
+	// Clicks on quests
 	private static boolean click(Screen screen, MouseButtonEvent event) {
-		Slot slot = ((ContainerHoveredSlotAccessor) screen).mccinfo$getHoveredSlot();
-		if (slot == null || !slot.hasItem() || slot.container instanceof Inventory || !locked(slot.getItem())) {
+		if (!(screen instanceof AbstractContainerScreen<?> container)) {
+			return false;
+		}
+		Slot slot = slotAt(container, event.x(), event.y());
+		if (slot == null || slot.container instanceof Inventory) {
 			return false;
 		}
 		boolean shift = (event.modifiers() & GLFW.GLFW_MOD_SHIFT) != 0;
+		if (shift && active() && waitingReroll(slot)) {
+			blockedSound();
+			return true;
+		}
+		if (!slot.hasItem()) {
+			return false;
+		}
+		if (!locked(slot.getItem())) {
+			if (shift && active() && isQuest(slot.getItem())) {
+				rerolledSlot = slot;
+				rerolledKey = key(slot.getItem(), found(slot.getItem()));
+				rerolledAt = Util.getMillis();
+			}
+			return false;
+		}
 		if (!shift && event.button() == GLFW.GLFW_MOUSE_BUTTON_RIGHT) {
 			UNLOCKED.add(key(slot.getItem(), found(slot.getItem())));
 			NeuItems.clickSound();
@@ -333,17 +359,50 @@ public final class QuestLock {
 		if (!shift) {
 			return false;
 		}
-		Minecraft.getInstance().getSoundManager().play(SimpleSoundInstance.forUI(BLOCKED_SOUND, 1.0F));
+		blockedSound();
 		return true;
 	}
 
-	// Quest with a locked task, not unlocked by hand
-	private static boolean locked(ItemStack stack) {
-		ModConfig config = ModConfig.get();
-		if (!config.questLock || config.questLockGames.isEmpty() && config.questLockTasks.isEmpty() || !OverlayStyle.onMccIsland()
-				|| !Permissions.has(Permissions.Perm.UTILS) || !isQuest(stack)) {
+	private static void blockedSound() {
+		Minecraft.getInstance().getSoundManager().play(SimpleSoundInstance.forUI(BLOCKED_SOUND, 1.0F));
+	}
+
+	private static Slot slotAt(AbstractContainerScreen<?> screen, double x, double y) {
+		ContainerHoveredSlotAccessor accessor = (ContainerHoveredSlotAccessor) screen;
+		double localX = x - accessor.mccinfo$getLeftPos();
+		double localY = y - accessor.mccinfo$getTopPos();
+		for (Slot slot : screen.getMenu().slots) {
+			if (slot.isActive() && localX >= slot.x - 1 && localX < slot.x + SLOT_SIZE + 1 && localY >= slot.y - 1 && localY < slot.y + SLOT_SIZE + 1) {
+				return slot;
+			}
+		}
+		return null;
+	}
+
+	// Wait for the reroll
+	private static boolean waitingReroll(Slot slot) {
+		if (slot != rerolledSlot) {
 			return false;
 		}
+		if (Util.getMillis() - rerolledAt >= REROLL_WAIT_MILLIS
+				|| slot.hasItem() && isQuest(slot.getItem()) && !key(slot.getItem(), found(slot.getItem())).equals(rerolledKey)) {
+			rerolledSlot = null;
+			return false;
+		}
+		return true;
+	}
+
+	private static boolean active() {
+		ModConfig config = ModConfig.get();
+		return config.questLock && !(config.questLockGames.isEmpty() && config.questLockTasks.isEmpty()) && OverlayStyle.onMccIsland()
+				&& Permissions.has(Permissions.Perm.UTILS);
+	}
+
+	private static boolean locked(ItemStack stack) {
+		if (!active() || !isQuest(stack)) {
+			return false;
+		}
+		ModConfig config = ModConfig.get();
 		List<Found> found = found(stack);
 		if (found.isEmpty() || UNLOCKED.contains(key(stack, found))) {
 			return false;

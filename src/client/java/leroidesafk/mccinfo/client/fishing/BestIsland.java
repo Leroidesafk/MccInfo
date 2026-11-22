@@ -36,7 +36,7 @@ public final class BestIsland {
 	// Fishing Perks menu
 	private static final String PERKS_TITLE = "fishing perks";
 	private static final int TITLE_SLOT = 8;
-	private static final Pattern PERK_PATTERN = Pattern.compile("^(.+?)\\s*\\((\\d+)\\s*/\\s*\\d+\\)$");
+	private static final Pattern PERK_PATTERN = Pattern.compile("^(.+?)\\s*\\((\\d+)\\s*/\\s*(\\d+)\\)$");
 
 	// Overclocks, in the Supply Preserve menu
 	private static final String OVERCLOCKS_TITLE = "supply preserve perk";
@@ -115,11 +115,13 @@ public final class BestIsland {
 
 	// Open menus and the chances read from them
 	private static final ContainerWatch WATCH = new ContainerWatch();
+	private static final List<String> LEVEL_OVERCLOCKS = List.of(HOOK_OVERCLOCK, MAGNET_OVERCLOCK, ROD_OVERCLOCK, UNSTABLE_OVERCLOCK);
 
 	private static boolean night;
 	private static int timeTicks;
 	private static Container openIslands;
 	private static Container openPerks;
+	private static Container openSupplies;
 	private static Set<String> bestIslands = Set.of();
 	private static Map<String, Double> dayChances = Map.of();
 	private static Map<String, Double> nightChances = Map.of();
@@ -159,6 +161,7 @@ public final class BestIsland {
 		if (!FishCollection.allowed()) {
 			openIslands = null;
 			openPerks = null;
+			openSupplies = null;
 			bestIslands = Set.of();
 			WATCH.reset();
 			return;
@@ -170,6 +173,7 @@ public final class BestIsland {
 		if (!(client.gui.screen() instanceof ContainerScreen screen)) {
 			openIslands = null;
 			openPerks = null;
+			openSupplies = null;
 			bestIslands = Set.of();
 			WATCH.reset();
 			return;
@@ -187,6 +191,7 @@ public final class BestIsland {
 		}
 		openIslands = null;
 		openPerks = null;
+		openSupplies = null;
 		bestIslands = Set.of();
 		String title = screen.getTitle().getString().toLowerCase(Locale.ROOT);
 		if (title.contains(PERKS_TITLE) || container.getContainerSize() > TITLE_SLOT && name(container.getItem(TITLE_SLOT)).contains(PERKS_TITLE)) {
@@ -195,6 +200,7 @@ public final class BestIsland {
 		} else if (container.getContainerSize() > OVERCLOCKS_SLOT && name(container.getItem(OVERCLOCKS_SLOT)).contains(OVERCLOCKS_TITLE)) {
 			readPerks(container);
 			readEquipment(container);
+			openSupplies = container;
 		} else if (container.getContainerSize() > LEVEL_SLOT && LEVEL_PATTERN.matcher(name(container.getItem(LEVEL_SLOT))).matches()
 				|| title.contains(ISLANDS_TITLE) || container.getContainerSize() > TITLE_SLOT && name(container.getItem(TITLE_SLOT)).contains(ISLANDS_TITLE)) {
 			readBossBars(client);
@@ -792,7 +798,24 @@ public final class BestIsland {
 				|| !canUpgrade(slot.getItem())) {
 			return;
 		}
-		SlotIndicators.bottomLeft(graphics, slot, SlotIndicators.ARROW);
+		SlotIndicators.topRight(graphics, slot, SlotIndicators.ARROW);
+	}
+
+	// Perk level and max, in Fishing Perks and Fishing Supplies
+	public static int[] perkLevel(Slot slot, ItemStack stack) {
+		if (!FishCollection.allowed() || slot == null || stack.isEmpty()) {
+			return null;
+		}
+		boolean perks = openPerks != null && slot.container == openPerks;
+		boolean supplies = openSupplies != null && slot.container == openSupplies;
+		if (!perks && !supplies) {
+			return null;
+		}
+		Matcher matcher = PERK_PATTERN.matcher(name(stack));
+		if (!matcher.matches() || supplies && !LEVEL_OVERCLOCKS.contains(matcher.group(1).trim())) {
+			return null;
+		}
+		return new int[] {Integer.parseInt(matcher.group(2)), Integer.parseInt(matcher.group(3))};
 	}
 
 	// "Upgrade Cost:" without "Upgrade cost not met"

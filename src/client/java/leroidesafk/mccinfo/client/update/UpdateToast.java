@@ -46,8 +46,6 @@ public final class UpdateToast {
 	private static final int COLOR_HEADER_LINE = 0xFF323232;
 	private static final int COLOR_TEXT = 0xFFBDBDBD;
 	private static final int COLOR_META = 0xFF7A7A7A;
-	private static final int COLOR_ERROR = 0xFFD05050;
-	private static final int COLOR_SUCCESS = 0xFF55C46A;
 	private static final int COLOR_BUTTON_TEXT = 0xFFFFFFFF;
 	private static final int COLOR_DISABLED_TEXT = 0xFF8A8A8A;
 
@@ -69,9 +67,9 @@ public final class UpdateToast {
 	private static float slide;
 	private static long lastFrame = Util.getMillis();
 	private static Box panel;
-	private static Box install;
+	private static Box main;
 	private static Box later;
-	private static boolean installEnabled;
+	private static boolean mainEnabled;
 
 	private UpdateToast() {
 	}
@@ -79,7 +77,7 @@ public final class UpdateToast {
 	// HUD, and over inventories and chests
 	public static void register() {
 		HudElementRegistry.addLast(Mccinfo.id("update_toast"), UpdateToast::extract);
-		ClientPlayConnectionEvents.JOIN.register((handler, sender, client) -> dismissed = false);
+		ClientPlayConnectionEvents.DISCONNECT.register((handler, client) -> dismissed = false);
 		ScreenEvents.AFTER_INIT.register((client, screen, width, height) -> {
 			if (screen instanceof AbstractContainerScreen<?>) {
 				ScreenEvents.afterForeground(screen).register((current, graphics, mouseX, mouseY, a) -> extractOverChat(graphics));
@@ -98,7 +96,7 @@ public final class UpdateToast {
 		slide = 0.0F;
 	}
 
-	// Closed with Later until the next join or a new version
+	// Closed with Later until the next disconnect or a new version
 	public static boolean wanted(Minecraft client) {
 		return !dismissed && client.level != null && MccIsland.isConnected() && ModUpdater.requiredVersion() != null;
 	}
@@ -127,16 +125,13 @@ public final class UpdateToast {
 		}
 		Font font = client.font;
 		int inner = WIDTH - BORDER * 2 - PADDING * 2;
+		UpdateAction action = ModUpdater.action();
 		List<FormattedCharSequence> status = new ArrayList<>();
-		int statusColor = COLOR_META;
-		Component message = statusMessage();
+		int statusColor = action != null ? action.statusColor() : COLOR_META;
+		Component message = action != null ? action.status()
+				: Component.translatable(ModUpdater.downloadUrl() != null ? "screen.mccinfo.update.manual" : "screen.mccinfo.update.no_link");
 		if (message != null) {
 			status.addAll(font.split(message, Math.round(inner / SMALL_SCALE)));
-			statusColor = switch (ModUpdater.state()) {
-				case FAILED -> COLOR_ERROR;
-				case INSTALLED -> ModUpdater.restartFailed() ? COLOR_ERROR : COLOR_SUCCESS;
-				default -> COLOR_META;
-			};
 		}
 		int height = BORDER * 2 + PADDING * 2 + HEADER_HEIGHT + SMALL_LINE + LINE_GAP + BUTTON_HEIGHT + BUTTON_GAP;
 		height += status.size() * (SMALL_LINE + LINE_GAP);
@@ -172,37 +167,16 @@ public final class UpdateToast {
 		}
 		top += BUTTON_GAP - LINE_GAP;
 		int buttonWidth = (inner - BUTTON_GAP) / 2;
-		// Without autoupdate the button opens the Download Link
-		boolean manual = !ModUpdater.allowed();
-		installEnabled = manual ? ModUpdater.downloadUrl() != null
-				: ModUpdater.available() && (ModUpdater.state() == ModUpdater.State.IDLE || ModUpdater.state() == ModUpdater.State.FAILED);
-		install = new Box(left, top, buttonWidth, BUTTON_HEIGHT);
+		// Without an action the button opens the Download Link
+		mainEnabled = action != null ? action.enabled() : ModUpdater.downloadUrl() != null;
+		main = new Box(left, top, buttonWidth, BUTTON_HEIGHT);
 		later = new Box(left + inner - buttonWidth, top, buttonWidth, BUTTON_HEIGHT);
-		String installKey = manual ? "screen.mccinfo.update.download" : switch (ModUpdater.state()) {
-			case DOWNLOADING -> "screen.mccinfo.update.downloading_short";
-			case INSTALLED -> "screen.mccinfo.update.installed_short";
-			case FAILED -> "screen.mccinfo.update.retry";
-			case IDLE -> "screen.mccinfo.update.install";
-		};
-		button(graphics, font, install, Component.translatable(installKey), installEnabled ? INSTALL : DISABLED, installEnabled, mouseX, mouseY);
+		Component mainLabel = action != null ? action.button() : Component.translatable("screen.mccinfo.update.download");
+		button(graphics, font, main, mainLabel, mainEnabled ? INSTALL : DISABLED, mainEnabled, mouseX, mouseY);
 		button(graphics, font, later, Component.translatable("screen.mccinfo.update.later"), LATER, true, mouseX, mouseY);
-		if ((installEnabled && install.contains(mouseX, mouseY)) || later.contains(mouseX, mouseY)) {
+		if ((mainEnabled && main.contains(mouseX, mouseY)) || later.contains(mouseX, mouseY)) {
 			NeuItems.pointer(graphics);
 		}
-	}
-
-	private static Component statusMessage() {
-		if (!ModUpdater.allowed()) {
-			return Component.translatable(ModUpdater.downloadUrl() != null ? "screen.mccinfo.update.manual" : "screen.mccinfo.update.no_link");
-		}
-		return switch (ModUpdater.state()) {
-			case DOWNLOADING -> Component.translatable("screen.mccinfo.update.downloading");
-			case INSTALLED -> Component.translatable(ModUpdater.restartFailed() ? "screen.mccinfo.update.restart_failed" : "screen.mccinfo.update.installed");
-			case FAILED -> Component.translatable("screen.mccinfo.update.failed", ModUpdater.error());
-			case IDLE -> ModUpdater.available() ? null
-					: ModUpdater.older() ? Component.translatable("screen.mccinfo.update.older", ModUpdater.requiredVersion(), Permissions.MOD_VERSION)
-					: Component.translatable("screen.mccinfo.update.unavailable");
-		};
 	}
 
 	// Drawing helpers, shared with other boxes
@@ -246,10 +220,11 @@ public final class UpdateToast {
 		if (slide < 1.0F || event.button() != GLFW.GLFW_MOUSE_BUTTON_LEFT) {
 			return true;
 		}
-		if (installEnabled && install.contains(event.x(), event.y())) {
+		if (mainEnabled && main.contains(event.x(), event.y())) {
 			NeuItems.clickSound();
-			if (ModUpdater.allowed()) {
-				ModUpdater.install();
+			UpdateAction action = ModUpdater.action();
+			if (action != null) {
+				action.click();
 			} else if (ModUpdater.downloadUrl() != null) {
 				Minecraft client = Minecraft.getInstance();
 				net.minecraft.client.gui.screens.ConfirmLinkScreen.confirmLinkNow(client.gui.screen(), ModUpdater.downloadUrl());

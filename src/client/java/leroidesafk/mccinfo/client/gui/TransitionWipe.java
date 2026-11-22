@@ -2,6 +2,7 @@ package leroidesafk.mccinfo.client.gui;
 
 import leroidesafk.mccinfo.client.ModConfig;
 import leroidesafk.mccinfo.client.relay.Permissions;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.network.chat.Component;
 import net.minecraft.util.Mth;
@@ -11,7 +12,8 @@ public final class TransitionWipe {
 	public enum Style {
 		DIAMOND("screen.mccinfo.settings.transition_style.diamond"),
 		DIAGONAL("screen.mccinfo.settings.transition_style.diagonal"),
-		WAVES("screen.mccinfo.settings.transition_style.waves");
+		WAVES("screen.mccinfo.settings.transition_style.waves"),
+		IRIS("screen.mccinfo.settings.transition_style.iris");
 
 		final String translationKey;
 
@@ -24,12 +26,10 @@ public final class TransitionWipe {
 	private static final String GLYPH = "";
 	// Timing, colors and sizes
 	private static final int COLOR = 0xFF000000;
-	private static final int EDGE_COLOR = 0xFF3C3C46;
 	private static final long MIN_IN_MS = 250L;
 	private static final long OUT_MS = 600L;
 	private static final float SPREAD = 0.6F;
 	private static final float DIAGONAL_IN_SPREAD = 0.72F;
-	private static final float DIAGONAL_EDGE_LAG = 0.1F;
 	private static final float DIAGONAL_OUT_SPREAD = 0.45F;
 	private static final float CELLS_PER_HEIGHT = 8.75F;
 	private static final float OVERLAP = 1.06F;
@@ -93,7 +93,7 @@ public final class TransitionWipe {
 		return shown;
 	}
 
-	// Full color once covered, else waves or diamonds
+	// Full color once covered, else waves, iris or diamonds
 	private static void draw(GuiGraphicsExtractor graphics, float progress, boolean out, Style style) {
 		int width = graphics.guiWidth();
 		int height = graphics.guiHeight();
@@ -106,41 +106,43 @@ public final class TransitionWipe {
 			waves(graphics, out ? 1.0F - progress : progress, width, height);
 			return;
 		}
+		if (style == Style.IRIS) {
+			graphics.nextStratum();
+			iris(graphics, ease(out ? 1.0F - progress : progress), width, height);
+			return;
+		}
 		float cell = Math.max(9.6F, height / CELLS_PER_HEIGHT);
 		float half = cell / 2.0F;
 		float centerX = width / 2.0F;
 		float centerY = height / 2.0F;
 		int columns = (int) Math.ceil(centerX / cell) + 1;
 		int rows = (int) Math.ceil(centerY / cell) + 1;
-		boolean edge = style == Style.DIAGONAL && !out;
 		graphics.nextStratum();
-		for (int layer = edge ? 0 : 1; layer < 2; layer++) {
-			for (int row = -rows; row <= rows; row++) {
-				for (int column = -columns; column <= columns; column++) {
-					for (int offset = 0; offset < 2; offset++) {
-						float x = centerX + column * cell + offset * half;
-						float y = centerY + row * cell + offset * half;
-						if (x < -half || x > width + half || y < -half || y > height + half) {
-							continue;
-						}
-						float size = size(style, progress, out, layer == 0, x, y, width, height, cell);
-						if (size <= 0.0F) {
-							continue;
-						}
-						int color = layer == 0 ? EDGE_COLOR : COLOR;
-						if (style == Style.DIAMOND) {
-							int alpha = Mth.clamp((int) (size * 255.0F), 0, 255);
-							color = (alpha << 24) | (color & 0xFFFFFF);
-						}
-						diamond(graphics, x, y, size * half * OVERLAP, color);
+		for (int row = -rows; row <= rows; row++) {
+			for (int column = -columns; column <= columns; column++) {
+				for (int offset = 0; offset < 2; offset++) {
+					float x = centerX + column * cell + offset * half;
+					float y = centerY + row * cell + offset * half;
+					if (x < -half || x > width + half || y < -half || y > height + half) {
+						continue;
 					}
+					float size = size(style, progress, out, x, y, width, height, cell);
+					if (size <= 0.0F) {
+						continue;
+					}
+					int color = COLOR;
+					if (style == Style.DIAMOND) {
+						int alpha = Mth.clamp((int) (size * 255.0F), 0, 255);
+						color = (alpha << 24) | (color & 0xFFFFFF);
+					}
+					diamond(graphics, x, y, size * half * OVERLAP, color);
 				}
 			}
 		}
 	}
 
 	// Diamond size from its distance to the center or the corner
-	private static float size(Style style, float progress, boolean out, boolean edge, float x, float y, int width, int height, float cell) {
+	private static float size(Style style, float progress, boolean out, float x, float y, int width, int height, float cell) {
 		float local;
 		if (style == Style.DIAMOND) {
 			float distance = (Math.abs(x - width / 2.0F) + Math.abs(y - height / 2.0F)) / (width / 2.0F + height / 2.0F + cell);
@@ -150,9 +152,7 @@ public final class TransitionWipe {
 			if (out) {
 				local = Mth.clamp((progress - distance * DIAGONAL_OUT_SPREAD) / (1.0F - DIAGONAL_OUT_SPREAD), 0.0F, 1.0F);
 			} else {
-				float window = 1.0F - DIAGONAL_IN_SPREAD - DIAGONAL_EDGE_LAG;
-				float shifted = edge ? progress : progress - DIAGONAL_EDGE_LAG;
-				local = Mth.clamp((shifted - distance * DIAGONAL_IN_SPREAD) / window, 0.0F, 1.0F);
+				local = Mth.clamp((progress - distance * DIAGONAL_IN_SPREAD) / (1.0F - DIAGONAL_IN_SPREAD), 0.0F, 1.0F);
 			}
 		}
 		float eased = ease(local);
@@ -182,6 +182,35 @@ public final class TransitionWipe {
 				graphics.fill(column, height - body, column + 1, height, bodyColor);
 			}
 		}
+	}
+
+	// Black around a shrinking circle, drawn in rows
+	private static void iris(GuiGraphicsExtractor graphics, float t, int width, int height) {
+		if (t <= 0.0F) {
+			return;
+		}
+		float scale = Math.max(1, Minecraft.getInstance().getWindow().getGuiScale());
+		int pixelWidth = Math.round(width * scale);
+		int pixelHeight = Math.round(height * scale);
+		float centerX = pixelWidth / 2.0F;
+		float centerY = pixelHeight / 2.0F;
+		float maxRadius = (float) Math.sqrt(centerX * centerX + centerY * centerY);
+		float radius = (1.0F - t) * maxRadius;
+		int step = Math.max(1, Math.round(scale));
+		int top = Math.max(0, (int) Math.floor((centerY - radius) / step) * step);
+		int bottom = Math.min(pixelHeight, (int) Math.ceil((centerY + radius) / step) * step);
+		graphics.pose().pushMatrix();
+		graphics.pose().scale(1.0F / scale, 1.0F / scale);
+		graphics.fill(0, 0, pixelWidth, top, COLOR);
+		graphics.fill(0, bottom, pixelWidth, pixelHeight, COLOR);
+		int middle = Math.round(centerX);
+		for (int row = top; row < bottom; row += step) {
+			float dy = row + step / 2.0F - centerY;
+			int half = Math.abs(dy) >= radius ? 0 : Math.round((float) Math.sqrt(radius * radius - dy * dy));
+			graphics.fill(0, row, middle - half, row + step, COLOR);
+			graphics.fill(middle + half, row, pixelWidth, row + step, COLOR);
+		}
+		graphics.pose().popMatrix();
 	}
 
 	// Square turned 45 degrees

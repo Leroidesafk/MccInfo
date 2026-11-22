@@ -17,6 +17,7 @@ import net.minecraft.client.DeltaTracker;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
+import leroidesafk.mccinfo.client.fishing.FishingMessagesOverlay;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.FontDescription;
 import net.minecraft.network.chat.FormattedText;
@@ -281,7 +282,7 @@ public final class ParkourSplits {
 		save();
 	}
 
-	// Split time in the chat
+	// Split time in the chat or the Fishing Messages box
 	private static void sendSplitMessage(Timer current) {
 		Minecraft client = Minecraft.getInstance();
 		if (client.player == null) {
@@ -290,8 +291,12 @@ public final class ParkourSplits {
 		MutableComponent message = Component.literal("[").withStyle(ChatFormatting.GREEN).append(icon(CHECK_ICON)).append("] ")
 				.append(Component.translatable("message.mccinfo.parkour.split_complete", current.levelName))
 				.append(Component.literal(String.format(Locale.ROOT, "%.3fs", current.seconds())).withStyle(ChatFormatting.WHITE));
-		if (ModConfig.get().parkourSplitImprovements) {
+		ModConfig config = ModConfig.get();
+		if (config.parkourSplitImprovements) {
 			message.append(Component.empty().withStyle(ChatFormatting.WHITE).append(improvementText(current.improvement())));
+			if (config.parkourImprovementsInFishingMessages && FishingMessagesOverlay.addAndOpen(message)) {
+				return;
+			}
 		}
 		client.player.sendSystemMessage(message);
 	}

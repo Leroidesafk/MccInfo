@@ -9,7 +9,6 @@ import leroidesafk.mccinfo.client.items.NeuItems;
 import leroidesafk.mccinfo.client.items.NeuNpcs;
 import leroidesafk.mccinfo.client.widget.RockPaperScissors;
 import leroidesafk.mccinfo.client.patchnotes.PatchNotes;
-import leroidesafk.mccinfo.client.update.ModUninstaller;
 import leroidesafk.mccinfo.client.update.ModUpdater;
 import leroidesafk.mccinfo.client.voice.VoiceChat;
 import com.google.gson.Gson;
@@ -58,8 +57,8 @@ public final class SpotSync {
 	}
 
 	// Messages from the relay
-	private record PermsMessage(boolean whitelisted, boolean admin, Boolean moderator, Boolean authenticated, Boolean banned, List<String> perms, Boolean outdated,
-			String requiredVersion, Boolean autoUpdate, ModUpdater.UpdateInfo update, String downloadUrl, String downloadLink) {
+	private record PermsMessage(boolean whitelisted, boolean admin, Boolean moderator, Boolean authenticated, List<String> perms, Boolean outdated,
+			Boolean updateAvailable, String requiredVersion, String downloadUrl, String downloadLink, String minimumVersion) {
 	}
 
 	private static final java.util.regex.Pattern PLAYER_NAME = java.util.regex.Pattern.compile("[A-Za-z0-9_]{1,16}");
@@ -143,7 +142,7 @@ public final class SpotSync {
 				state = State.OFF;
 				Permissions.update(false, false, List.of(), false, null);
 				Permissions.setModerator(false);
-				ModUpdater.offer(false, null, null, true, null);
+				ModUpdater.offer(false, null, null, null);
 				NeuItems.clear();
 				RockPaperScissors.disconnected();
 			}
@@ -503,15 +502,13 @@ public final class SpotSync {
 					Permissions.update(perms.whitelisted(), perms.admin(), perms.perms(), Boolean.TRUE.equals(perms.outdated()), perms.requiredVersion());
 					Permissions.setModerator(Boolean.TRUE.equals(perms.moderator()));
 					Permissions.setDownloadLink(perms.downloadLink());
+					Permissions.setMinimumVersion(perms.minimumVersion());
 					if (Boolean.TRUE.equals(perms.authenticated()) && !authenticated) {
 						authenticated = true;
 						authFailures = 0;
 						RESEND.forEach(Runnable::run);
 					}
-					ModUpdater.offer(Boolean.TRUE.equals(perms.outdated()), perms.requiredVersion(), perms.update(), !Boolean.FALSE.equals(perms.autoUpdate()), perms.downloadUrl());
-					if (Boolean.TRUE.equals(perms.authenticated()) && perms.banned() != null) {
-						ModUninstaller.banned(perms.banned());
-					}
+					ModUpdater.offer(Boolean.TRUE.equals(perms.outdated()) || Boolean.TRUE.equals(perms.updateAvailable()), perms.requiredVersion(), perms.downloadUrl(), object);
 				}
 				case "admin_result" -> {
 					if (client.player != null && object.has("message") && !(object.has("quiet") && object.get("quiet").getAsBoolean())) {
@@ -534,6 +531,7 @@ public final class SpotSync {
 				case "fish_list" -> FishCollection.receive(object);
 				case "badge_list" -> leroidesafk.mccinfo.client.badges.Badges.receive(object);
 				case "emojis" -> Emojis.receive(object);
+				case "links" -> Links.receive(object);
 				case "patchnote_preview" -> PatchNotes.preview(object);
 				case "voice_secret" -> VoiceChat.receiveSecret(object);
 				case "voice_players" -> VoiceChat.receivePlayers(object);

@@ -57,7 +57,7 @@ public final class FishingMessagesOverlay {
 
 		@Override
 		public boolean allowed() {
-			return inAllowedInstance();
+			return inAllowedInstance() || (openedOn != null && openedOn.equals(MccServer.server()));
 		}
 
 		@Override
@@ -114,6 +114,7 @@ public final class FishingMessagesOverlay {
 	};
 
 	public static final MovableOverlay MOVABLE = BOX;
+	private static String openedOn;
 
 	private FishingMessagesOverlay() {
 	}
@@ -163,6 +164,22 @@ public final class FishingMessagesOverlay {
 		add(shown);
 		CompactFishingMessages.shown(shown, true);
 		return false;
+	}
+
+	// Message that opens the box, even outside fishing
+	public static boolean addAndOpen(Component message) {
+		if (!MOVABLE.enabled() || !OverlayStyle.onMccIsland()) {
+			return false;
+		}
+		if (MOVABLE.hidden()) {
+			MOVABLE.setHidden(false);
+			ModConfig.get().save();
+		}
+		if (!inAllowedInstance()) {
+			openedOn = MccServer.server();
+		}
+		add(message);
+		return true;
 	}
 
 	static boolean replace(Component old, Component updated) {

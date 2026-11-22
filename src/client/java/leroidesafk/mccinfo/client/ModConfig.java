@@ -1,6 +1,7 @@
 package leroidesafk.mccinfo.client;
 
 import leroidesafk.mccinfo.client.gui.TransitionWipe;
+import leroidesafk.mccinfo.client.items.BetterItemAmounts;
 import leroidesafk.mccinfo.client.util.AsyncFiles;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
@@ -56,13 +57,17 @@ public final class ModConfig {
 	public boolean compactFishingMessages;
 	// Icons on items and slots
 	public boolean bestIslandIcon = true;
+	public boolean islandWindIcons = true;
 	public boolean fishCheckIcon = true;
 	public boolean perkUpgradeIcon = true;
+	public boolean perkLevels = true;
+	public BetterItemAmounts.PerkLevelStyle perkLevelStyle = BetterItemAmounts.PerkLevelStyle.LEVEL;
 	public boolean notOwnedIcon = true;
 	public boolean missingMaterialsIcon = true;
 	public boolean maxedCosmeticIcon = true;
 	public boolean lockedPerkIcon = true;
 	public boolean completedCollectionIcon = true;
+	public boolean betterItemAmounts = true;
 	// Island Exchange and Settings Info
 	public boolean exchangeLowestPrice = true;
 	public boolean exchangeTaxCalculator = true;
@@ -171,6 +176,7 @@ public final class ModConfig {
 	public boolean parkourSplitTimer = true;
 	public boolean parkourSplitChat = true;
 	public boolean parkourSplitImprovements = true;
+	public boolean parkourImprovementsInFishingMessages = true;
 	public int parkourImprovementAt = -3;
 	public boolean parkourSplitAverage;
 	// Quest Lock: locked games and tasks

@@ -31,7 +31,6 @@ public final class Permissions {
 		SEE_ITEMS("seeitems"),
 		EVENTS("events"),
 		UTILS("utils"),
-		AUTO_UPDATE("autoupdate"),
 		VOICE_CHAT("voicechat");
 
 		public final String id;
@@ -182,5 +181,16 @@ public final class Permissions {
 
 	static void setDownloadLink(String value) {
 		downloadLink = value;
+	}
+
+	// Minimum version, for the admin
+	private static String minimumVersion;
+
+	public static String minimumVersion() {
+		return admin ? minimumVersion : null;
+	}
+
+	static void setMinimumVersion(String value) {
+		minimumVersion = value;
 	}
 }

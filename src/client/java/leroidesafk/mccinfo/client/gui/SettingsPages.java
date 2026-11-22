@@ -5,6 +5,7 @@ import leroidesafk.mccinfo.client.PrivateKeys;
 import leroidesafk.mccinfo.client.chat.MccApi;
 import leroidesafk.mccinfo.client.chat.ModChat;
 import leroidesafk.mccinfo.client.fishing.FishCollectionScreen;
+import leroidesafk.mccinfo.client.items.BetterItemAmounts;
 import leroidesafk.mccinfo.client.parkour.ParkourSplits;
 import leroidesafk.mccinfo.client.relay.ModUsers;
 import leroidesafk.mccinfo.client.relay.Permissions;
@@ -481,6 +482,12 @@ public final class SettingsPages {
 					config.completedCollectionIcon = value;
 					config.save();
 				})));
+		if (utilsPerm) display.add(SettingsPanel.Card.of("better_item_amounts", text("screen.mccinfo.settings.better_item_amounts"),
+				text("screen.mccinfo.settings.better_item_amounts.description"),
+				toggle(() -> config.betterItemAmounts, value -> {
+					config.betterItemAmounts = value;
+					config.save();
+				})));
 		if (utilsPerm) display.add(SettingsPanel.Card.of("mcc_jei", text("screen.mccinfo.settings.mcc_jei"),
 				text("screen.mccinfo.settings.mcc_jei.description"),
 				toggle(() -> config.mccJei, value -> {
@@ -647,6 +654,14 @@ public final class SettingsPages {
 					config.parkourSplitImprovements = value;
 					config.save();
 				})));
+		if (config.parkourSplitImprovements) {
+			splits.add(SettingsPanel.Card.child("parkour_improvements_fishing_messages", text("screen.mccinfo.settings.parkour_improvements_fishing_messages"),
+					text("screen.mccinfo.settings.parkour_improvements_fishing_messages.description"),
+					toggle(() -> config.parkourImprovementsInFishingMessages, value -> {
+						config.parkourImprovementsInFishingMessages = value;
+						config.save();
+					})));
+		}
 		splits.add(SettingsPanel.Card.of("parkour_improvement_at", text("screen.mccinfo.settings.parkour_improvement_at"),
 				text("screen.mccinfo.settings.parkour_improvement_at.description"),
 				new SettingsPanel.Slider(IMPROVEMENT_MIN, () -> IMPROVEMENT_MAX, 1, () -> config.parkourImprovementAt,
@@ -924,12 +939,31 @@ public final class SettingsPages {
 			collection.add(SettingsPanel.Card.of("best_island_icon", text("screen.mccinfo.settings.best_island_icon"),
 					text("screen.mccinfo.settings.best_island_icon.description"),
 					toggle(() -> config.bestIslandIcon, value -> config.bestIslandIcon = value)));
+			collection.add(SettingsPanel.Card.of("island_wind_icons", text("screen.mccinfo.settings.island_wind_icons"),
+					text("screen.mccinfo.settings.island_wind_icons.description"),
+					toggle(() -> config.islandWindIcons, value -> config.islandWindIcons = value)));
 			collection.add(SettingsPanel.Card.of("fish_check_icon", text("screen.mccinfo.settings.fish_check_icon"),
 					text("screen.mccinfo.settings.fish_check_icon.description"),
 					toggle(() -> config.fishCheckIcon, value -> config.fishCheckIcon = value)));
 			collection.add(SettingsPanel.Card.of("perk_upgrade_icon", text("screen.mccinfo.settings.perk_upgrade_icon"),
 					text("screen.mccinfo.settings.perk_upgrade_icon.description"),
 					toggle(() -> config.perkUpgradeIcon, value -> config.perkUpgradeIcon = value)));
+			// Perk levels and their style
+			collection.add(SettingsPanel.Card.of("perk_levels",text("screen.mccinfo.settings.perk_levels"),
+					text("screen.mccinfo.settings.perk_levels.description"),
+					toggle(() -> config.perkLevels, value -> {
+						config.perkLevels = value;
+						config.save();
+					})));
+			if (config.perkLevels) {
+				collection.add(SettingsPanel.Card.child("perk_level_style", text("screen.mccinfo.settings.perk_level_style"),
+						text("screen.mccinfo.settings.perk_level_style.description"),
+						dropdown(() -> BetterItemAmounts.perkLevelStyleName(BetterItemAmounts.perkLevelStyle()), List.of(BetterItemAmounts.PerkLevelStyle.values()),
+								BetterItemAmounts::perkLevelStyleName, value -> {
+									config.perkLevelStyle = value;
+									config.save();
+								})));
+			}
 		}
 
 		List<SettingsPanel.Section> sections = new ArrayList<>();

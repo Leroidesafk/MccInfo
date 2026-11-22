@@ -3,6 +3,7 @@ package leroidesafk.mccinfo.client.mixin.items;
 import leroidesafk.mccinfo.client.fishing.BestIsland;
 import leroidesafk.mccinfo.client.events.CarnivalTicketOverlay;
 import leroidesafk.mccinfo.client.fishing.FishCollection;
+import leroidesafk.mccinfo.client.fishing.IslandWinds;
 import leroidesafk.mccinfo.client.items.CosmeticPreview;
 import leroidesafk.mccinfo.client.items.ExchangeDeals;
 import leroidesafk.mccinfo.client.items.GrayscaleItems;
@@ -35,6 +36,7 @@ public class ContainerSlotIconMixin {
 		FishCollection.extractCheckIcon(graphics, slot);
 		BestIsland.extractBestIcon(graphics, slot);
 		BestIsland.extractUpgradeIcon(graphics, slot);
+		IslandWinds.extractIcons(graphics, slot);
 		SlotIndicators.extractItemIndicators(graphics, slot);
 		ExchangeDeals.extractDealIcon(graphics, slot);
 		QuestLock.extractLockIcon(graphics, slot);

@@ -3,15 +3,20 @@
 # MccInfo
 
 
-Client-side Qol mod for [MCC Island](https://mccisland.net), Minecraft 26.2.
+Client-side Qol mod for [MCC Island](https://mccisland.net), Minecraft 26.2 and 26.3.
 
 ## Requirements
 
-- Minecraft 26.2
-- [Fabric Loader](https://fabricmc.net/use/) 0.19.3 or newer
-- [Fabric API](https://modrinth.com/mod/fabric-api)
-- [Noxesium](https://modrinth.com/mod/noxesium) 3.2.3 or newer
-- [Simple Voice Chat](https://modrinth.com/plugin/simple-voice-chat) is optional.
+Each Minecraft version has its own MccInfo jar, made for its own versions of Fabric and Noxesium:
+
+| Minecraft | Branch | [Fabric Loader](https://fabricmc.net/use/) | [Fabric API](https://modrinth.com/mod/fabric-api) | [Noxesium](https://modrinth.com/mod/noxesium) |
+|---|---|---|---|---|
+| 26.3 | `mc/26.3` | 0.20.1 or newer | 0.166.2+26.3 or newer | 3.3.0 or newer |
+| 26.2 | `mc/26.2` | 0.19.3 or newer | 0.157.0+26.2 or newer | 3.2.3 or newer |
+
+Use the jar that matches your Minecraft version (its name starts with `mccinfo-26.2+` or `mccinfo-26.3+`).
+
+[Simple Voice Chat](https://modrinth.com/plugin/simple-voice-chat) is optional.
 
 ## Features
 

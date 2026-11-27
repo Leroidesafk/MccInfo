@@ -74,12 +74,13 @@ public final class PrivateKeys {
 			return this.key.getType() == InputConstants.Type.MOUSE && this.key.getValue() == event.button() && accepts(modifiersOf(event.modifiers(), this.key));
 		}
 
+		// Longer combination on the same key wins
 		private boolean accepts(int held) {
 			if ((held & this.modifiers) != this.modifiers) {
 				return false;
 			}
 			for (Key other : ALL) {
-				if (other != this && other.usable() && other.key.equals(this.key) && Integer.bitCount(other.modifiers) > Integer.bitCount(this.modifiers)
+				if (other != this && other.usable() && other.key.equals(this.key) && modifierCount(other.modifiers) > modifierCount(this.modifiers)
 						&& (held & other.modifiers) == other.modifiers) {
 					return false;
 				}
@@ -223,9 +224,26 @@ public final class PrivateKeys {
 		};
 	}
 
+	// Held modifiers, without the key's own one
 	public static int modifiersOf(int modifiers, InputConstants.Key key) {
 		int own = key.getType() == InputConstants.Type.KEYSYM ? modifierBit(key.getValue()) : 0;
-		return modifiers & MODIFIER_MASK & ~own;
+		int normalized = 0;
+		for (int bit : MODIFIER_BITS) {
+			if ((modifiers & bit) != 0) {
+				normalized |= bit;
+			}
+		}
+		return normalized & ~own;
+	}
+
+	private static int modifierCount(int modifiers) {
+		int count = 0;
+		for (int bit : MODIFIER_BITS) {
+			if ((modifiers & bit) != 0) {
+				count++;
+			}
+		}
+		return count;
 	}
 
 	public static int heldModifiers(Window window) {

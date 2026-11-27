@@ -66,6 +66,9 @@ public class MccinfoClient implements ClientModInitializer {
 		leroidesafk.mccinfo.client.badges.Badges.register();
 		BestIsland.register();
 		leroidesafk.mccinfo.client.items.ExchangeDeals.register();
+		leroidesafk.mccinfo.client.items.WardrobeDonations.register();
+		leroidesafk.mccinfo.client.items.CrateChances.register();
+		leroidesafk.mccinfo.client.items.CraftTimers.register();
 		leroidesafk.mccinfo.client.items.ExchangeTax.register();
 		leroidesafk.mccinfo.client.parkour.ParkourLimits.register();
 		leroidesafk.mccinfo.client.parkour.ParkourSplits.register();

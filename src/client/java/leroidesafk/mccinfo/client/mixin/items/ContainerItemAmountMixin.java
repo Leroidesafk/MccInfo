@@ -4,6 +4,7 @@ import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import leroidesafk.mccinfo.client.fishing.BestIsland;
 import leroidesafk.mccinfo.client.items.BetterItemAmounts;
+import leroidesafk.mccinfo.client.items.PlayerNumbers;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
@@ -27,9 +28,16 @@ public class ContainerItemAmountMixin {
 		this.mccinfo$amountSlot = slot;
 	}
 
-	// Perk level or real amount instead of the vanilla count
 	@WrapOperation(method = "extractSlot", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/gui/GuiGraphicsExtractor;itemDecorations(Lnet/minecraft/client/gui/Font;Lnet/minecraft/world/item/ItemStack;IILjava/lang/String;)V"))
 	private void mccinfo$betterAmount(GuiGraphicsExtractor graphics, Font font, ItemStack stack, int x, int y, String countText, Operation<Void> original) {
+		// Navigator player count
+		long players = countText == null ? PlayerNumbers.playersFor(this.mccinfo$amountSlot, stack) : -1L;
+		if (players >= 0L) {
+			original.call(graphics, font, stack.copyWithCount(1), x, y, null);
+			BetterItemAmounts.extractPlayers(graphics, font, players, x, y);
+			return;
+		}
+		// Perk level or real amount
 		int[] perk = countText == null && BetterItemAmounts.perkLevelsShown() ? BestIsland.perkLevel(this.mccinfo$amountSlot, stack) : null;
 		if (perk != null) {
 			original.call(graphics, font, stack.copyWithCount(1), x, y, null);

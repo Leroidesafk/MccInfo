@@ -461,6 +461,10 @@ public final class NeuItems {
 			ScreenMouseEvents.allowMouseClick(screen).register((current, event) -> !lockSlot(current, event));
 			ScreenMouseEvents.allowMouseDrag(screen).register((current, event, dragX, dragY) -> !CosmeticPreview.drag(dragX, dragY));
 			ScreenMouseEvents.allowMouseRelease(screen).register((current, event) -> !CosmeticPreview.stopDrag());
+			// Drag of list items to a target
+			ScreenMouseEvents.allowMouseDrag(screen).register((current, event, dragX, dragY) -> !NeuDrag.drag(current, event.x(), event.y()));
+			ScreenMouseEvents.allowMouseRelease(screen).register((current, event) -> !NeuDrag.release(current, event.x(), event.y()));
+			ScreenEvents.afterForeground(screen).register((current, graphics, mouseX, mouseY, a) -> NeuDrag.extract(current, graphics, mouseX, mouseY));
 			ScreenKeyboardEvents.allowKeyPress(screen).register((current, event) -> {
 				if (!search.visible || !search.isFocused() || event.key() == GLFW.GLFW_KEY_ESCAPE) {
 					return true;
@@ -1087,6 +1091,11 @@ public final class NeuItems {
 		search.setY(screen.height - SEARCH_HEIGHT - MARGIN);
 	}
 
+	// Top of the search bar, screen bottom when hidden
+	public static int searchTop(Screen screen) {
+		return shown() ? screen.height - SEARCH_HEIGHT - MARGIN : screen.height;
+	}
+
 	private static Layout layout(Screen screen) {
 		ContainerHoveredSlotAccessor container = (ContainerHoveredSlotAccessor) screen;
 		return layout(screen.width, screen.height, container.mccinfo$getLeftPos() + container.mccinfo$getImageWidth());
@@ -1287,6 +1296,8 @@ public final class NeuItems {
 				return true;
 			} else if (favoriteClick(event)) {
 				toggleFavorite(id);
+			} else if (event.button() == GLFW.GLFW_MOUSE_BUTTON_LEFT && NeuDrag.begin(screen, id, entries.get(index).stack(), event.x(), event.y())) {
+				return true;
 			} else if (event.button() == GLFW.GLFW_MOUSE_BUTTON_LEFT || event.button() == GLFW.GLFW_MOUSE_BUTTON_RIGHT) {
 				NeuCrafts.open(screen, id, event.button() == GLFW.GLFW_MOUSE_BUTTON_LEFT);
 			}
@@ -1359,6 +1370,8 @@ public final class NeuItems {
 			return true;
 		} else if (index >= 0 && favoriteClick(event)) {
 			toggleFavorite(filtered.get(index).entry().id);
+		} else if (index >= 0 && event.button() == GLFW.GLFW_MOUSE_BUTTON_LEFT && NeuDrag.begin(screen, filtered.get(index).entry().id, filtered.get(index).entry().stack(), event.x(), event.y())) {
+			return true;
 		} else if (index >= 0 && (event.button() == GLFW.GLFW_MOUSE_BUTTON_LEFT || event.button() == GLFW.GLFW_MOUSE_BUTTON_RIGHT)) {
 			NeuCrafts.open(screen, filtered.get(index).entry().id, event.button() == GLFW.GLFW_MOUSE_BUTTON_LEFT);
 		} else if (layout.previous().contains(event.x(), event.y()) && page > 0) {
@@ -1636,7 +1649,8 @@ public final class NeuItems {
 		extractBadge(graphics, badge.stack(), badge.x() + SQUARE_SIZE - 1, badge.y() + SQUARE_SIZE - 1);
 	}
 
-	static void extractBadge(GuiGraphicsExtractor graphics, ItemStack stack, float right, float bottom) {
+	// Item in the corner of a slot, normal zoom
+	public static void extractBadge(GuiGraphicsExtractor graphics, ItemStack stack, float right, float bottom) {
 		extractBadge(graphics, stack, right, bottom, 1);
 	}
 

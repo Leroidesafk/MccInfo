@@ -340,6 +340,11 @@ public final class NeuCrafts {
 		return withCrafts.contains(itemId);
 	}
 
+	// Every craft of the relay
+	static List<Craft> crafts() {
+		return CRAFTS;
+	}
+
 	public static Layout layoutForType(String type) {
 		return LAYOUTS.get(type);
 	}

@@ -26,7 +26,7 @@ import java.util.regex.Pattern;
 
 // Small icons on the corners of item slots
 public final class SlotIndicators {
-	// Icons of infos.png, numbered line by line
+	// Icons of infos.png
 	public static final int NOT_OWNED = 0;
 	public static final int ARROW = 1;
 	public static final int MISSING_MATERIALS = 2;
@@ -34,6 +34,7 @@ public final class SlotIndicators {
 	public static final int LOCKED = 4;
 	public static final int LOWEST_PRICE = 6;
 	public static final int COMPLETE = 5;
+	public static final int DONATABLE = 10;
 
 	// Icon sheet, 3 screen pixels per texture pixel at GUI Scale 3
 	private static final int DESIGN_GUI_SCALE = 3;
@@ -89,9 +90,9 @@ public final class SlotIndicators {
 		draw(graphics, icon, slot.x * guiScale - offset, (slot.y + SLOT_SIZE) * guiScale - ICON_SIZE * texel + offset, texel, guiScale);
 	}
 
-	// Texture pixel size, smaller below GUI Scale 3
+	// Screen pixels per texture pixel, follows the GUI Scale
 	public static float texelPixels(float designPixels, int guiScale) {
-		float pixels = designPixels * Math.min(guiScale, DESIGN_GUI_SCALE) / DESIGN_GUI_SCALE;
+		float pixels = designPixels * guiScale / DESIGN_GUI_SCALE;
 		return pixels >= 1.0F ? Math.round(pixels) : pixels;
 	}
 
@@ -129,7 +130,7 @@ public final class SlotIndicators {
 		graphics.pose().popMatrix();
 	}
 
-	// Every item icon of a slot, each with its setting
+	// Every item icon of a slot
 	public static void extractItemIndicators(GuiGraphicsExtractor graphics, Slot slot) {
 		ItemStack stack = slot.getItem();
 		if (stack.isEmpty() || !OverlayStyle.onMccIsland() || !Permissions.has(Permissions.Perm.UTILS)) {
@@ -147,6 +148,20 @@ public final class SlotIndicators {
 			if (collectionIcon >= 0) {
 				topRight(graphics, slot, collectionIcon);
 			}
+		}
+		// Wardrobe donations: maxed, count or donatable
+		leroidesafk.mccinfo.client.chat.MccApi.Donation donation = WardrobeDonations.donation(slot);
+		if (donation != null && donation.maxed()) {
+			topRight(graphics, slot, MAXED);
+		} else if (donation != null && donation.made() >= 1) {
+			int guiScale = guiScale();
+			float texel = texelPixels(TEXEL_PIXELS, guiScale);
+			float offset = TOP_RIGHT_OFFSET_TEXELS * texel;
+			float centerX = (Math.round((slot.x + SLOT_SIZE) * guiScale - ICON_SIZE * texel + offset) + ICON_SIZE * texel / 2.0F) / guiScale;
+			float centerY = (Math.round(slot.y * guiScale - offset) + ICON_SIZE * texel / 2.0F) / guiScale;
+			BetterItemAmounts.extractOnIcon(graphics, Minecraft.getInstance().font, donation.made(), Math.round(centerX), Math.round(centerY));
+		} else if (donation != null) {
+			topRight(graphics, slot, DONATABLE);
 		}
 		Optional<CompoundTag> blueprint = blueprint(stack);
 		if (blueprint.isEmpty()) {

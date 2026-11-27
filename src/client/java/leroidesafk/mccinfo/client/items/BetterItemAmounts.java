@@ -56,6 +56,7 @@ public final class BetterItemAmounts {
 	private static final int BOTTOM_ROWS_END = 7;
 	private static final float LEVEL_TEXEL_PIXELS = 2.0F;
 	private static final int LEVEL_SPLIT_TOP = 14;
+	private static final int LEVEL_LEFT_SHIFT = 1;
 
 	// Menus from the relay
 	private static volatile List<Menu> menus = List.of();
@@ -204,7 +205,28 @@ public final class BetterItemAmounts {
 	}
 
 	public static void extract(GuiGraphicsExtractor graphics, Font font, long amount, int x, int y) {
-		extractParts(graphics, font, x, y, 1.0F, TEXT_TOP + BOTTOM_ROWS_TOP, new Part(format(amount), TEXT_COLOR, BOTTOM_COLOR, SHADOW_COLOR));
+		extractParts(graphics, font, x, y, 1.0F, TEXT_TOP + BOTTOM_ROWS_TOP, 0, new Part(format(amount), TEXT_COLOR, BOTTOM_COLOR, SHADOW_COLOR));
+	}
+
+	// Navigator player count, 0 in red
+	public static void extractPlayers(GuiGraphicsExtractor graphics, Font font, long players, int x, int y) {
+		extractParts(graphics, font, x, y, 1.0F, TEXT_TOP + BOTTOM_ROWS_TOP, 0, players == 0L
+				? new Part("0", ZERO_TEXT_COLOR, ZERO_BOTTOM_COLOR, ZERO_SHADOW_COLOR)
+				: new Part(format(players), TEXT_COLOR, BOTTOM_COLOR, SHADOW_COLOR));
+	}
+
+	// Amount centered on an icon
+	public static void extractOnIcon(GuiGraphicsExtractor graphics, Font font, long amount, int centerX, int centerY) {
+		Part[] parts = {new Part(format(amount), TEXT_COLOR, BOTTOM_COLOR, SHADOW_COLOR)};
+		Component[] texts = {OverlayStyle.hudText(parts[0].text())};
+		int width = font.width(texts[0]);
+		int textX = centerX - (width - 1) / 2;
+		int textY = centerY - GLYPH_TOP - GLYPH_HEIGHT / 2;
+		extractFrame(graphics, textX - 1, textY + GLYPH_TOP - 1, textX + width, textY + GLYPH_TOP + GLYPH_HEIGHT + 1);
+		extractTexts(graphics, font, texts, parts, textX, textY, false);
+		graphics.enableScissor(textX, textY + BOTTOM_ROWS_TOP, textX + width + 1, textY + BOTTOM_ROWS_END);
+		extractTexts(graphics, font, texts, parts, textX, textY, true);
+		graphics.disableScissor();
 	}
 
 	// Perk levels
@@ -232,10 +254,10 @@ public final class BetterItemAmounts {
 		return ModConfig.get().perkLevels && Permissions.has(Permissions.Perm.UTILS) && OverlayStyle.onMccIsland();
 	}
 
-	// Level alone or small level/max
+	// Perk level, or level/max
 	public static void extractLevel(GuiGraphicsExtractor graphics, Font font, int level, int max, int x, int y) {
-		if (perkLevelStyle() == PerkLevelStyle.LEVEL) {
-			extractParts(graphics, font, x, y, 1.0F, TEXT_TOP + BOTTOM_ROWS_TOP, level == 0
+		if (max < 0 || perkLevelStyle() == PerkLevelStyle.LEVEL) {
+			extractParts(graphics, font, x, y, 1.0F, TEXT_TOP + BOTTOM_ROWS_TOP, 0, level == 0
 					? new Part("0", ZERO_TEXT_COLOR, ZERO_BOTTOM_COLOR, ZERO_SHADOW_COLOR)
 					: new Part(Integer.toString(level), TEXT_COLOR, BOTTOM_COLOR, SHADOW_COLOR));
 			return;
@@ -243,23 +265,23 @@ public final class BetterItemAmounts {
 		int guiScale = Math.max(1, Minecraft.getInstance().getWindow().getGuiScale());
 		float scale = SlotIndicators.texelPixels(LEVEL_TEXEL_PIXELS, guiScale) / guiScale;
 		if (level == 0) {
-			extractParts(graphics, font, x, y, scale, LEVEL_SPLIT_TOP, new Part("0", ZERO_TEXT_COLOR, ZERO_BOTTOM_COLOR, ZERO_SHADOW_COLOR),
+			extractParts(graphics, font, x, y, scale, LEVEL_SPLIT_TOP, LEVEL_LEFT_SHIFT, new Part("0", ZERO_TEXT_COLOR, ZERO_BOTTOM_COLOR, ZERO_SHADOW_COLOR),
 					new Part("/" + max, ZERO_MAX_TEXT_COLOR, ZERO_MAX_BOTTOM_COLOR, ZERO_MAX_SHADOW_COLOR));
 			return;
 		}
-		extractParts(graphics, font, x, y, scale, LEVEL_SPLIT_TOP, new Part(Integer.toString(level), TEXT_COLOR, BOTTOM_COLOR, SHADOW_COLOR),
+		extractParts(graphics, font, x, y, scale, LEVEL_SPLIT_TOP, LEVEL_LEFT_SHIFT, new Part(Integer.toString(level), TEXT_COLOR, BOTTOM_COLOR, SHADOW_COLOR),
 				new Part("/" + max, MAX_TEXT_COLOR, MAX_BOTTOM_COLOR, MAX_SHADOW_COLOR));
 	}
 
-	// Text, shadow and two colored bottom rows
-	private static void extractParts(GuiGraphicsExtractor graphics, Font font, int x, int y, float scale, int splitTop, Part... parts) {
+	// Framed text, bottom rows drawn in their own color
+	private static void extractParts(GuiGraphicsExtractor graphics, Font font, int x, int y, float scale, int splitTop, int leftShift, Part... parts) {
 		Component[] texts = new Component[parts.length];
 		int width = 0;
 		for (int i = 0; i < parts.length; i++) {
 			texts[i] = OverlayStyle.hudText(parts[i].text());
 			width += font.width(texts[i]);
 		}
-		int textX = -width;
+		int textX = -width - leftShift;
 		int textY = -BOTTOM_ROWS_TOP;
 		graphics.pose().pushMatrix();
 		graphics.pose().translate(x + RIGHT_EDGE, y + splitTop);
@@ -267,7 +289,7 @@ public final class BetterItemAmounts {
 		extractFrame(graphics, textX - 1, textY + GLYPH_TOP - 1, textX + width, textY + GLYPH_TOP + GLYPH_HEIGHT + 1);
 		extractTexts(graphics, font, texts, parts, textX, textY, false);
 		graphics.pose().popMatrix();
-		graphics.enableScissor(x + RIGHT_EDGE - Mth.ceil((width + 1) * scale), y + splitTop, x + RIGHT_EDGE + 1,
+		graphics.enableScissor(x + RIGHT_EDGE - Mth.ceil((width + leftShift + 1) * scale), y + splitTop, x + RIGHT_EDGE + 1,
 				y + splitTop + Mth.ceil((BOTTOM_ROWS_END - BOTTOM_ROWS_TOP) * scale));
 		graphics.pose().pushMatrix();
 		graphics.pose().translate(x + RIGHT_EDGE, y + splitTop);

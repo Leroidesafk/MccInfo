@@ -52,7 +52,8 @@ public final class ItemClipboard {
 		});
 	}
 
-	static JsonElement item() {
+	// Item saved in the clipboard file
+	public static JsonElement item() {
 		try {
 			JsonElement file = com.google.gson.JsonParser.parseString(Files.readString(PATH));
 			return file.isJsonObject() && file.getAsJsonObject().has("item") ? file.getAsJsonObject().get("item") : null;

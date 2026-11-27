@@ -39,6 +39,14 @@ public final class ModConfig {
 	public record InventoryButton(int slot, String command, String background, String iconType, String icon) {
 	}
 
+	// Forge or Assembler craft and its end time
+	public record CraftTimer(String station, int slot, String name, com.google.gson.JsonElement icon, long earliest, long end, boolean chatPending) {
+	}
+
+	// Chat room and its color
+	public record ChatRoom(String name, String color, boolean muted) {
+	}
+
 	// Event features
 	public boolean summerHearts;
 	public boolean halloweenTimer;
@@ -65,9 +73,19 @@ public final class ModConfig {
 	public boolean notOwnedIcon = true;
 	public boolean missingMaterialsIcon = true;
 	public boolean maxedCosmeticIcon = true;
+	public boolean wardrobeDonationIcon;
+	public boolean crateChances = true;
 	public boolean lockedPerkIcon = true;
 	public boolean completedCollectionIcon = true;
 	public boolean betterItemAmounts = true;
+	public boolean playerNumbers = false;
+	public boolean assemblerOnTop = true;
+	// Forge and Assembler Notification
+	public boolean craftNotify = true;
+	public boolean craftNotifyToast = true;
+	public boolean craftNotifyChat = true;
+	public boolean craftNotifySound = true;
+	public List<CraftTimer> craftTimers = new ArrayList<>();
 	// Island Exchange and Settings Info
 	public boolean exchangeLowestPrice = true;
 	public boolean exchangeTaxCalculator = true;
@@ -132,10 +150,14 @@ public final class ModConfig {
 	public boolean voiceChatEnabled = true;
 	public boolean voiceAnnounceMute = true;
 	public boolean voiceChatIcons = true;
+	// Server chats and chat rooms
+	public boolean serverChats = true;
+	public boolean focusReply = true;
+	public boolean roomChats = true;
+	public List<ChatRoom> chatRooms = new ArrayList<>();
+	public Map<String, String> chatRoomIcons = new HashMap<>();
 	// MccInfo chat and its box
 	public boolean modChat = true;
-	public boolean modChatNotify;
-	public String modChatNotifyChannel = "both";
 	public boolean modChatBox;
 	public String modChatBoxChannel = "both";
 	public int modChatBoxX = UNSET;
@@ -254,6 +276,17 @@ public final class ModConfig {
 						loaded.inventoryButtons = new ArrayList<>();
 					}
 					loaded.inventoryButtons.removeIf(button -> button == null || button.command() == null);
+					if (loaded.chatRooms == null) {
+						loaded.chatRooms = new ArrayList<>();
+					}
+					loaded.chatRooms.removeIf(room -> room == null || room.name() == null || room.name().isBlank());
+					if (loaded.craftTimers == null) {
+						loaded.craftTimers = new ArrayList<>();
+					}
+					loaded.craftTimers.removeIf(timer -> timer == null || timer.station() == null || timer.name() == null);
+					if (loaded.chatRoomIcons == null) {
+						loaded.chatRoomIcons = new HashMap<>();
+					}
 					if (loaded.privateKeys == null) {
 						loaded.privateKeys = new HashMap<>();
 					}

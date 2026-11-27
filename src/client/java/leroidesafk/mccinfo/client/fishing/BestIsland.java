@@ -68,9 +68,12 @@ public final class BestIsland {
 	private static final Set<String> STRONG_RODS = Set.of("boosted rod", "strong rod");
 	private static final String ELUSIVE_PERK = "elusive";
 
-	// Fishing Islands menu
+	// Islands and Fishing Progress menus
 	private static final int LEVEL_SLOT = 10;
-	private static final Pattern LEVEL_PATTERN = Pattern.compile("^fishing level \\d+$");
+	private static final Pattern LEVEL_PATTERN = Pattern.compile("^fishing level (\\d+)$");
+	private static final String PROGRESS_TITLE = "fishing progress";
+	private static final int RESEARCH_SLOT = 12;
+	private static final String RESEARCH_SUFFIX = " research";
 	private static final String LOCKED_MARKER = "locked!";
 
 	// Day from 8:30 to 20:30, read in the boss bar
@@ -122,6 +125,7 @@ public final class BestIsland {
 	private static Container openIslands;
 	private static Container openPerks;
 	private static Container openSupplies;
+	private static Container openProgress;
 	private static Set<String> bestIslands = Set.of();
 	private static Map<String, Double> dayChances = Map.of();
 	private static Map<String, Double> nightChances = Map.of();
@@ -156,12 +160,13 @@ public final class BestIsland {
 		return night;
 	}
 
-	// Open fishing menu, read once per change
+	// Open menu read again when its content changes
 	private static void tick(Minecraft client) {
 		if (!FishCollection.allowed()) {
 			openIslands = null;
 			openPerks = null;
 			openSupplies = null;
+			openProgress = null;
 			bestIslands = Set.of();
 			WATCH.reset();
 			return;
@@ -174,6 +179,7 @@ public final class BestIsland {
 			openIslands = null;
 			openPerks = null;
 			openSupplies = null;
+			openProgress = null;
 			bestIslands = Set.of();
 			WATCH.reset();
 			return;
@@ -194,6 +200,7 @@ public final class BestIsland {
 		openSupplies = null;
 		bestIslands = Set.of();
 		String title = screen.getTitle().getString().toLowerCase(Locale.ROOT);
+		openProgress = isProgress(container, title) ? container : null;
 		if (title.contains(PERKS_TITLE) || container.getContainerSize() > TITLE_SLOT && name(container.getItem(TITLE_SLOT)).contains(PERKS_TITLE)) {
 			readPerks(container);
 			openPerks = container;
@@ -203,6 +210,7 @@ public final class BestIsland {
 			openSupplies = container;
 		} else if (container.getContainerSize() > LEVEL_SLOT && LEVEL_PATTERN.matcher(name(container.getItem(LEVEL_SLOT))).matches()
 				|| title.contains(ISLANDS_TITLE) || container.getContainerSize() > TITLE_SLOT && name(container.getItem(TITLE_SLOT)).contains(ISLANDS_TITLE)) {
+			// Fishing Islands menu
 			readBossBars(client);
 			readLockedIslands(container);
 			openIslands = container;
@@ -801,10 +809,25 @@ public final class BestIsland {
 		SlotIndicators.topRight(graphics, slot, SlotIndicators.ARROW);
 	}
 
-	// Perk level and max, in Fishing Perks and Fishing Supplies
+	// Fishing Progress menu, by its title or research slot
+	private static boolean isProgress(Container container, String title) {
+		if (title.contains(PROGRESS_TITLE)) {
+			return true;
+		}
+		if (container.getContainerSize() <= RESEARCH_SLOT) {
+			return false;
+		}
+		Matcher matcher = PERK_PATTERN.matcher(name(container.getItem(RESEARCH_SLOT)));
+		return matcher.matches() && matcher.group(1).trim().endsWith(RESEARCH_SUFFIX);
+	}
+
+	// Level and max shown on a perk or progress slot
 	public static int[] perkLevel(Slot slot, ItemStack stack) {
 		if (!FishCollection.allowed() || slot == null || stack.isEmpty()) {
 			return null;
+		}
+		if (openProgress != null && slot.container == openProgress) {
+			return progressLevel(name(stack));
 		}
 		boolean perks = openPerks != null && slot.container == openPerks;
 		boolean supplies = openSupplies != null && slot.container == openSupplies;
@@ -816,6 +839,19 @@ public final class BestIsland {
 			return null;
 		}
 		return new int[] {Integer.parseInt(matcher.group(2)), Integer.parseInt(matcher.group(3))};
+	}
+
+	// Fishing level or research level, without max
+	private static int[] progressLevel(String name) {
+		Matcher level = LEVEL_PATTERN.matcher(name);
+		if (level.matches()) {
+			return new int[] {Integer.parseInt(level.group(1)), -1};
+		}
+		Matcher research = PERK_PATTERN.matcher(name);
+		if (research.matches() && research.group(1).trim().endsWith(RESEARCH_SUFFIX)) {
+			return new int[] {Integer.parseInt(research.group(2)), -1};
+		}
+		return null;
 	}
 
 	// "Upgrade Cost:" without "Upgrade cost not met"

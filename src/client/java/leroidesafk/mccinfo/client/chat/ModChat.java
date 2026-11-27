@@ -9,15 +9,17 @@ import leroidesafk.mccinfo.client.relay.SpotSync;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import com.mojang.blaze3d.platform.InputConstants;
 import com.mojang.serialization.JsonOps;
 import leroidesafk.mccinfo.Mccinfo;
+import org.lwjgl.sdl.SDLMouse;
 import leroidesafk.mccinfo.client.mixin.accessor.ChatComponentAccessor;
 import leroidesafk.mccinfo.client.mixin.accessor.ChatScreenAccessor;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents;
 import net.fabricmc.fabric.api.client.screen.v1.ScreenEvents;
+import net.fabricmc.fabric.api.client.screen.v1.ScreenMouseEvents;
 import net.fabricmc.fabric.api.client.screen.v1.Screens;
-import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
@@ -35,8 +37,6 @@ import net.minecraft.client.multiplayer.ClientPacketListener;
 import net.minecraft.client.multiplayer.PlayerInfo;
 import net.minecraft.client.multiplayer.chat.GuiMessageTag;
 import net.minecraft.client.renderer.RenderPipelines;
-import net.minecraft.client.resources.sounds.SimpleSoundInstance;
-import net.minecraft.sounds.SoundEvents;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.ComponentSerialization;
 import net.minecraft.network.chat.FontDescription;
@@ -61,10 +61,11 @@ public final class ModChat {
 	public static final int NORMAL = 0;
 	public static final int MCCINFO = 1;
 	public static final int STAFF = 2;
+	private static final int ROOM = 3;
 	private static final int NORMAL_INDICATOR = 0xFFFFFFFF;
-	private static final Identifier ICON = Mccinfo.id("textures/gui/ui/mccinfochat.png");
 	private static final Identifier HUD_FONT = Identifier.fromNamespaceAndPath("mcc", "hud");
 	private static final FontDescription ICON_FONT = new FontDescription.Resource(Mccinfo.id("mod_chat"));
+	private static final String FOCUS_ICON = "\ue004";
 	// Moderation icons
 	private static final String DELETE_ICON = "\ue001";
 	private static final String BAN_ICON = "\ue002";
@@ -105,17 +106,30 @@ public final class ModChat {
 	private static final Component PREFIX = Component.literal("").withStyle(Style.EMPTY.withColor(COLOR).withFont(new FontDescription.Resource(Mccinfo.id("mod_chat"))));
 	private static final Component STAFF_PREFIX = Component.literal("\ue000").withStyle(Style.EMPTY.withColor(STAFF_COLOR).withFont(new FontDescription.Resource(Mccinfo.id("mod_chat"))));
 	// Chat buttons
-	private static final int ICON_TEXTURE = 20;
-	private static final int ICON_CELL = 10;
-	private static final int ICON_WIDTH = 9;
-	private static final int ICON_HEIGHT = 7;
-	private static final int ICON_V = 2;
+	private static final Identifier ICONS = Mccinfo.id("textures/gui/ui/chat.png");
+	private static final int ICONS_TEXTURE = 52;
+	private static final int ICON_SIZE = 13;
+	private static final int MCCINFO_U = 39;
+	private static final int STAFF_V = 13;
+	private static final int PILL_HEIGHT = 9;
+	private static final int PILL_TOP = 2;
+	private static final int PILL_LEFT = 6;
+	private static final int TEXT_GAP = 2;
 	private static final int BUTTON_HEIGHT = 9;
 	private static final int PADDING = 2;
-	private static final int ICON_GAP = 4;
-	private static final int TRIDENT_BOTTOM = 26;
+	private static final int POPUP_GAP = 0;
+	private static final int BOTTOM = 23;
+	private static final int ROOM_GAP = 0;
 	private static final int STACK_GAP = 2;
-	private static final boolean TRIDENT = FabricLoader.getInstance().isModLoaded("trident");
+	private static final Identifier ROOM_ICONS = Mccinfo.id("textures/gui/ui/chat_colors.png");
+	private static final int ROOM_ICONS_TEXTURE = 39;
+	private static final int ARROW_WIDTH = 8;
+	private static final int ARROW_RIGHT_U = 13;
+	private static final int ARROW_LEFT_U = 26;
+	private static final int ARROW_V = 26;
+	private static final int ARROW_DISABLED = 0xFF606060;
+	private static final int HOTBAR_HALF_WIDTH = 91;
+	private static final int HOTBAR_GAP = 2;
 	// Shared names and items
 	private static final int MAX_DISPLAY_LENGTH = 32768;
 	private static final int MAX_DEPTH = 8;
@@ -133,14 +147,18 @@ public final class ModChat {
 	private static final int HINT_COLOR = 0x707070;
 	private static final int UNREAD_COLOR = 0xFFD83A3A;
 	private static final int MAX_UNREAD = 99;
-	private static final float NOTIFY_PITCH = 1.6F;
 
 	private static int active;
 	private static boolean open;
 	private static int unread;
 	private static int staffUnread;
+	private static Button serverButton;
 	private static Button button;
 	private static Button staffButton;
+	private static final java.util.List<Button> roomButtons = new java.util.ArrayList<>();
+	private static int roomY;
+	private static int roomScroll;
+	private static int roomMaxScroll;
 	private static long lastToggle;
 	private static final long TOGGLE_DEBOUNCE_MILLIS = 250L;
 
@@ -149,18 +167,37 @@ public final class ModChat {
 
 	public static void register() {
 		ChatStyle.register();
+		ChatChannels.register();
+		ChatRoomIcons.register();
 		MccApi.register();
 		ClientPlayConnectionEvents.JOIN.register((handler, sender, client) -> MccApi.check());
+		// Chat buttons and the room row
 		ScreenEvents.AFTER_INIT.register((client, screen, width, height) -> {
 			if (screen instanceof ChatScreen chatScreen) {
 				setOpen(true);
-				if (enabled()) {
-					button = new Button(height, false);
-					Screens.getWidgets(screen).add(button);
-					staffButton = staffEnabled() ? new Button(height, true) : null;
-					if (staffButton != null) {
-						Screens.getWidgets(screen).add(staffButton);
+				ScreenEvents.afterForeground(screen).register((current, graphics, mouseX, mouseY, a) -> focusTooltip(graphics, mouseX, mouseY));
+				int y = height - BOTTOM - (ICON_SIZE - BUTTON_HEIGHT);
+				roomButtons.clear();
+				roomY = y - ICON_SIZE - ROOM_GAP;
+				if (roomChatsEnabled()) {
+					Screens.getWidgets(screen).add(new RoomArrows());
+					for (ModConfig.ChatRoom room : ChatChannels.rooms()) {
+						Button added = new Button(roomY, ROOM, null, room);
+						roomButtons.add(added);
+						Screens.getWidgets(screen).add(added);
 					}
+					layoutRooms();
+				}
+				ScreenMouseEvents.allowMouseScroll(screen).register((current, mouseX, mouseY, scrollX, scrollY) -> !scrollRooms(mouseX, mouseY, scrollY != 0.0 ? scrollY : -scrollX));
+				serverButton = serverChatsEnabled() ? new Button(y, NORMAL, null, null) : null;
+				button = enabled() ? new Button(y, MCCINFO, serverButton, null) : null;
+				staffButton = staffEnabled() ? new Button(y, STAFF, button, null) : null;
+				for (Button added : new Button[] {serverButton, button, staffButton}) {
+					if (added != null) {
+						Screens.getWidgets(screen).add(added);
+					}
+				}
+				if (enabled()) {
 					styleInput(chatScreen);
 				}
 			}
@@ -170,14 +207,23 @@ public final class ModChat {
 			if (active == MCCINFO && !enabled() || active == STAFF && !staffEnabled()) {
 				setActive(NORMAL);
 			}
+			if (!focusEnabled()) {
+				ChatChannels.clearFocus();
+			}
+			if (!roomChatsEnabled()) {
+				ChatChannels.clearRoom();
+			}
 			setOpen(client.gui.screen() instanceof ChatScreen);
 		});
 		ClientPlayConnectionEvents.DISCONNECT.register((handler, client) -> {
 			active = NORMAL;
 			unread = 0;
 			staffUnread = 0;
+			serverButton = null;
 			button = null;
 			staffButton = null;
+			roomButtons.clear();
+			roomScroll = 0;
 		});
 	}
 
@@ -187,6 +233,18 @@ public final class ModChat {
 
 	static boolean enabled() {
 		return available() && ModConfig.get().modChat;
+	}
+
+	static boolean serverChatsEnabled() {
+		return available() && ModConfig.get().serverChats;
+	}
+
+	static boolean focusEnabled() {
+		return serverChatsEnabled() && ModConfig.get().focusReply;
+	}
+
+	static boolean roomChatsEnabled() {
+		return serverChatsEnabled() && ModConfig.get().roomChats;
 	}
 
 	static boolean staffEnabled() {
@@ -297,30 +355,165 @@ public final class ModChat {
 	}
 
 	public static boolean mouseClicked(MouseButtonEvent event) {
-		if (event.button() != 0 || button == null || !enabled()) {
+		if (event.button() != InputConstants.MOUSE_BUTTON_LEFT) {
 			return false;
 		}
+		boolean server = serverButton != null && serverChatsEnabled();
+		ChatChannels.Channel popup = server ? serverButton.popupAt(event.x(), event.y()) : null;
+		boolean serverClick = server && (popup != null || serverButton.isMouseOver(event.x(), event.y()));
+		boolean modClick = button != null && enabled() && button.isMouseOver(event.x(), event.y());
 		boolean staffClick = staffButton != null && staffEnabled() && staffButton.isMouseOver(event.x(), event.y());
-		if (!staffClick && !button.isMouseOver(event.x(), event.y())) {
-			return false;
+		boolean underPopup = serverClick || server && serverButton.overPopup(event.x(), event.y());
+		Button roomClick = underPopup ? null : roomAt(event.x(), event.y());
+		int arrowClick = underPopup ? 0 : arrowAt(event.x(), event.y());
+		if (!serverClick && !staffClick && !modClick && roomClick == null && arrowClick == 0) {
+			return focusClicked();
 		}
 		// Ignore repeated clicks
 		long now = System.currentTimeMillis();
-		boolean pressed = Minecraft.getInstance().mouseHandler.isLeftPressed();
+		boolean pressed = (SDLMouse.SDL_GetMouseState((java.nio.FloatBuffer) null, null) & SDLMouse.SDL_BUTTON_LMASK) != 0;
 		if (!pressed || now - lastToggle < TOGGLE_DEBOUNCE_MILLIS) {
 			Mccinfo.LOGGER.info("MccInfo chat: repeated click ignored");
 			return true;
 		}
 		lastToggle = now;
+		if (arrowClick != 0) {
+			if (arrowEnabled(arrowClick)) {
+				NeuItems.clickSound();
+				roomScroll += arrowClick;
+				layoutRooms();
+			}
+			return true;
+		}
 		NeuItems.clickSound();
+		if (serverClick) {
+			setActive(NORMAL);
+			if (popup != null) {
+				ChatChannels.join(popup);
+			} else {
+				ChatChannels.clearFocus();
+				ChatChannels.clearRoom();
+			}
+			return true;
+		}
+		if (roomClick != null) {
+			setActive(NORMAL);
+			if (roomClick.room.name().equals(ChatChannels.room())) {
+				ChatChannels.clearRoom();
+			} else {
+				ChatChannels.focusRoom(roomClick.room.name());
+			}
+			return true;
+		}
 		int target = staffClick ? STAFF : MCCINFO;
 		setActive(active == target ? NORMAL : target);
 		return true;
 	}
 
+	private static int roomLimit() {
+		return Minecraft.getInstance().getWindow().getGuiScaledWidth() / 2 - HOTBAR_HALF_WIDTH - HOTBAR_GAP;
+	}
+
+	// Rooms left of the hotbar, arrows when they overflow
+	private static boolean layoutRooms() {
+		int count = roomButtons.size();
+		int limit = roomLimit();
+		int total = -STACK_GAP;
+		for (Button room : roomButtons) {
+			total += room.getWidth() + STACK_GAP;
+		}
+		boolean arrows = PADDING + total > limit;
+		int start = arrows ? PADDING + ARROW_WIDTH + STACK_GAP : PADDING;
+		int end = arrows ? limit - ARROW_WIDTH - STACK_GAP : limit;
+		roomMaxScroll = 0;
+		if (arrows) {
+			int used = 0;
+			for (int i = count - 1; i >= 0; i--) {
+				int width = roomButtons.get(i).getWidth();
+				if (i < count - 1 && used + width > end - start) {
+					break;
+				}
+				used += width + STACK_GAP;
+				roomMaxScroll = i;
+			}
+		}
+		roomScroll = Mth.clamp(roomScroll, 0, roomMaxScroll);
+		int x = start;
+		boolean full = false;
+		for (int i = 0; i < count; i++) {
+			Button room = roomButtons.get(i);
+			boolean shown = i >= roomScroll && !full && (x + room.getWidth() <= end || i == roomScroll);
+			full |= i >= roomScroll && !shown;
+			room.visible = shown && roomChatsEnabled();
+			if (shown) {
+				room.setX(x);
+				x += room.getWidth() + STACK_GAP;
+			}
+		}
+		return arrows;
+	}
+
+	// Mouse over the buttons, the popup or the room row
+	static boolean overButtons(double mouseX, double mouseY) {
+		if (!open) {
+			return false;
+		}
+		for (Button shown : new Button[] {serverButton, button, staffButton}) {
+			if (shown != null && shown.isMouseOver(mouseX, mouseY)) {
+				return true;
+			}
+		}
+		if (serverButton != null && serverChatsEnabled() && serverButton.overPopup(mouseX, mouseY)) {
+			return true;
+		}
+		return roomChatsEnabled() && !roomButtons.isEmpty() && mouseY >= roomY && mouseY < roomY + ICON_SIZE && mouseX >= PADDING && mouseX < roomLimit();
+	}
+
+	private static boolean arrowEnabled(int direction) {
+		return direction < 0 ? roomScroll > 0 : roomScroll < roomMaxScroll;
+	}
+
+	private static int arrowAt(double mouseX, double mouseY) {
+		if (!roomChatsEnabled() || roomButtons.isEmpty() || !layoutRooms() || mouseY < roomY || mouseY >= roomY + ICON_SIZE) {
+			return 0;
+		}
+		if (mouseX >= PADDING && mouseX < PADDING + ARROW_WIDTH) {
+			return -1;
+		}
+		int right = roomLimit() - ARROW_WIDTH;
+		return mouseX >= right && mouseX < right + ARROW_WIDTH ? 1 : 0;
+	}
+
+	private static boolean scrollRooms(double mouseX, double mouseY, double amount) {
+		if (!roomChatsEnabled() || roomButtons.isEmpty() || amount == 0.0 || !layoutRooms()
+				|| mouseY < roomY || mouseY >= roomY + ICON_SIZE || mouseX < PADDING || mouseX >= roomLimit()
+				|| serverButton != null && serverButton.overPopup(mouseX, mouseY)) {
+			return false;
+		}
+		roomScroll -= (int) Math.signum(amount);
+		layoutRooms();
+		return true;
+	}
+
+	private static Button roomAt(double mouseX, double mouseY) {
+		if (!roomChatsEnabled()) {
+			return null;
+		}
+		layoutRooms();
+		for (Button room : roomButtons) {
+			if (room.isMouseOver(mouseX, mouseY)) {
+				return room;
+			}
+		}
+		return null;
+	}
+
 	public static boolean intercept(String message, boolean addToHistory) {
 		String trimmed = Emojis.expand(message).strip();
-		if (active == NORMAL || !enabled() || trimmed.isEmpty() || trimmed.startsWith("/")) {
+		if (active == NORMAL) {
+			return focusMessage(trimmed, addToHistory);
+		}
+		if (!enabled() || trimmed.isEmpty() || trimmed.startsWith("/")) {
 			return false;
 		}
 		if (addToHistory) {
@@ -328,6 +521,52 @@ public final class ModChat {
 		}
 		Mccinfo.LOGGER.info("MccInfo chat: message sent to the relay");
 		send(trimmed, active == STAFF);
+		return true;
+	}
+
+	// Private message under the mouse, for Focus Reply
+	private static String hoveredPrivateMessage() {
+		GuiMessage message = ChatCopy.messageUnderMouse();
+		if (!open || message == null || !focusEnabled()) {
+			return null;
+		}
+		String name = ChatChannels.privateMessageName(message.content());
+		return name == null || name.equals(ChatChannels.focus()) && ChatChannels.room() == null && active == NORMAL ? null : name;
+	}
+
+	private static void focusTooltip(GuiGraphicsExtractor graphics, int mouseX, int mouseY) {
+		String name = hoveredPrivateMessage();
+		if (name != null) {
+			Component tooltip = Component.empty().append(Component.literal(FOCUS_ICON).withStyle(Style.EMPTY.withFont(ICON_FONT).withColor(0xFFFFFF)))
+					.append(" ").append(Component.translatable("screen.mccinfo.mod_chat.focus", name));
+			graphics.setTooltipForNextFrame(Minecraft.getInstance().font, tooltip, mouseX, mouseY);
+			NeuItems.pointer(graphics);
+		}
+	}
+
+	private static boolean focusClicked() {
+		String name = hoveredPrivateMessage();
+		if (name == null) {
+			return false;
+		}
+		NeuItems.clickSound();
+		ChatChannels.focus(name);
+		setActive(NORMAL);
+		return true;
+	}
+
+	// Typed text sent to the room or the focused player
+	private static boolean focusMessage(String text, boolean addToHistory) {
+		String room = roomChatsEnabled() ? ChatChannels.room() : null;
+		String focus = focusEnabled() ? ChatChannels.focus() : null;
+		Minecraft client = Minecraft.getInstance();
+		if (room == null && focus == null || text.isEmpty() || text.startsWith("/") || client.player == null) {
+			return false;
+		}
+		if (addToHistory) {
+			client.gui.hud.getChat().addRecentChat(text);
+		}
+		client.player.connection.sendCommand(room != null ? "cr " + room + " " + text : "msg " + focus + " " + text);
 		return true;
 	}
 
@@ -401,7 +640,7 @@ public final class ModChat {
 		}
 		track(shown, message);
 		addToChat(shown, staffChannel ? STAFF_TAG : TAG);
-		// Unread count and sound, not for own messages
+		// Unread count, not for own messages
 		if (own) {
 			return;
 		}
@@ -409,9 +648,6 @@ public final class ModChat {
 			staffUnread = Math.min(staffUnread + 1, MAX_UNREAD);
 		} else if (!staffChannel && active != MCCINFO) {
 			unread = Math.min(unread + 1, MAX_UNREAD);
-		}
-		if (ModConfig.get().modChatNotify && includes(ModConfig.get().modChatNotifyChannel, channel)) {
-			client.getSoundManager().play(SimpleSoundInstance.forUI(SoundEvents.NOTE_BLOCK_PLING, NOTIFY_PITCH));
 		}
 	}
 
@@ -817,6 +1053,12 @@ public final class ModChat {
 		return result;
 	}
 
+	// Item icon alone, for other messages
+	public static Component itemIcon(ItemStack stack) {
+		return Component.literal(Character.toString(ITEM_SLOT)).withStyle(Style.EMPTY.withFont(ICON_FONT).withColor(ChatFormatting.WHITE)
+				.withHoverEvent(new HoverEvent.ShowItem(ItemStackTemplate.fromNonEmptyStack(stack.copyWithCount(1)))));
+	}
+
 	private static Component itemPiece(ItemStack stack, int count) {
 		ItemStack shown = ChatItemTooltip.mark(stack.copyWithCount(1));
 		MutableComponent piece = Component.empty().withStyle(Style.EMPTY.withColor(ChatFormatting.WHITE)
@@ -828,10 +1070,8 @@ public final class ModChat {
 		return piece;
 	}
 
+	// Items drawn on every chat line
 	public static void chatItems(ChatComponent.ChatGraphicsAccess access, GuiMessage.Line line, int textTop, float opacity) {
-		if (!isMod(line.parent())) {
-			return;
-		}
 		GuiGraphicsExtractor graphics = access instanceof leroidesafk.mccinfo.client.mixin.accessor.ChatFocusedGraphicsAccessor focused ? focused.mccinfo$getGraphics()
 				: access instanceof leroidesafk.mccinfo.client.mixin.accessor.ChatBackgroundGraphicsAccessor background ? background.mccinfo$getGraphics() : null;
 		if (graphics != null) {
@@ -839,12 +1079,13 @@ public final class ModChat {
 		}
 	}
 
+	// Item glyphs replaced by their item
 	public static void extractItems(GuiGraphicsExtractor graphics, FormattedCharSequence line, float x, float y, float alpha) {
 		Font font = Minecraft.getInstance().font;
 		java.util.List<Object[]> slots = new java.util.ArrayList<>();
 		float[] cursor = {0.0F};
 		line.accept((index, style, codepoint) -> {
-			if (codepoint == ITEM_SLOT && style.getHoverEvent() instanceof HoverEvent.ShowItem(ItemStackTemplate template)) {
+			if (codepoint == ITEM_SLOT && ICON_FONT.equals(style.getFont()) && style.getHoverEvent() instanceof HoverEvent.ShowItem(ItemStackTemplate template)) {
 				slots.add(new Object[] {cursor[0], template});
 			}
 			cursor[0] += font.width(FormattedCharSequence.codepoint(codepoint, style));
@@ -929,21 +1170,103 @@ public final class ModChat {
 		return forcedTag != null ? forcedTag : tag;
 	}
 
-	private static final class Button extends AbstractWidget {
-		private final boolean staff;
+	// Scroll arrows of the room row
+	private static final class RoomArrows extends AbstractWidget {
+		RoomArrows() {
+			super(PADDING, roomY, 0, ICON_SIZE, Component.empty());
+		}
 
-		Button(int screenHeight, boolean staff) {
-			super(PADDING, screenHeight - TRIDENT_BOTTOM - (TRIDENT ? BUTTON_HEIGHT + STACK_GAP : 0), 0, BUTTON_HEIGHT, Component.empty());
-			this.staff = staff;
-			setWidth(Minecraft.getInstance().font.width(label()) + ICON_WIDTH + PADDING * 2 + ICON_GAP);
+		@Override
+		protected void extractWidgetRenderState(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float partialTick) {
+			if (!layoutRooms() || !roomChatsEnabled()) {
+				return;
+			}
+			int right = roomLimit() - ARROW_WIDTH;
+			graphics.blit(RenderPipelines.GUI_TEXTURED, ROOM_ICONS, PADDING, roomY, ARROW_LEFT_U, ARROW_V, ARROW_WIDTH, ICON_SIZE, ROOM_ICONS_TEXTURE, ROOM_ICONS_TEXTURE,
+					arrowEnabled(-1) ? 0xFFFFFFFF : ARROW_DISABLED);
+			graphics.blit(RenderPipelines.GUI_TEXTURED, ROOM_ICONS, right, roomY, ARROW_RIGHT_U, ARROW_V, ARROW_WIDTH, ICON_SIZE, ROOM_ICONS_TEXTURE, ROOM_ICONS_TEXTURE,
+					arrowEnabled(1) ? 0xFFFFFFFF : ARROW_DISABLED);
+			int hovered = serverButton != null && serverButton.overPopup(mouseX, mouseY) ? 0 : arrowAt(mouseX, mouseY);
+			if (hovered != 0 && arrowEnabled(hovered)) {
+				NeuItems.pointer(graphics);
+			}
+		}
+
+		@Override
+		public boolean isMouseOver(double mouseX, double mouseY) {
+			return false;
+		}
+
+		@Override
+		protected void updateWidgetNarration(NarrationElementOutput output) {
+		}
+
+		@Override
+		public ComponentPath nextFocusPath(FocusNavigationEvent event) {
+			return null;
+		}
+	}
+
+	private static final class Button extends AbstractWidget {
+		private final int channel;
+		private final Button previous;
+		private final ModConfig.ChatRoom room;
+		private boolean expanded;
+
+		Button(int y, int channel, Button previous, ModConfig.ChatRoom room) {
+			super(PADDING, y, 0, ICON_SIZE, Component.empty());
+			this.channel = channel;
+			this.previous = previous;
+			this.room = room;
+			setWidth(width(label()));
+		}
+
+		private static int width(Component label) {
+			return ICON_SIZE + TEXT_GAP + Minecraft.getInstance().font.width(label) + PADDING;
 		}
 
 		private Component label() {
-			return hud(this.staff ? "MOD" : "MCCINFO");
+			return hud(switch (this.channel) {
+				case MCCINFO -> "MCCINFO";
+				case STAFF -> "MOD";
+				case ROOM -> this.room.name();
+				default -> ChatChannels.focus() != null ? ChatChannels.focusLabel() : ChatChannels.current().label;
+			});
+		}
+
+		private int color() {
+			return switch (this.channel) {
+				case MCCINFO -> COLOR;
+				case STAFF -> STAFF_COLOR;
+				case ROOM -> ChatChannels.roomBackground(this.room);
+				default -> ChatChannels.focus() != null ? ChatChannels.FOCUS_COLOR : ChatChannels.current().color;
+			};
+		}
+
+		private int u() {
+			return switch (this.channel) {
+				case MCCINFO -> MCCINFO_U;
+				case STAFF -> 0;
+				case ROOM -> ChatChannels.roomU(this.room);
+				default -> ChatChannels.focus() != null ? ChatChannels.FOCUS_U : ChatChannels.current().u;
+			};
+		}
+
+		private int v() {
+			return switch (this.channel) {
+				case MCCINFO -> 0;
+				case STAFF -> STAFF_V;
+				case ROOM -> ChatChannels.roomV(this.room);
+				default -> ChatChannels.focus() != null ? ChatChannels.FOCUS_V : ChatChannels.current().v;
+			};
 		}
 
 		private int unreadCount() {
-			return this.staff ? staffUnread : unread;
+			return switch (this.channel) {
+				case MCCINFO -> unread;
+				case STAFF -> staffUnread;
+				default -> 0;
+			};
 		}
 
 		private int unreadWidth(Font font) {
@@ -954,30 +1277,94 @@ public final class ModChat {
 			return Component.literal(text).withStyle(Style.EMPTY.withFont(new FontDescription.Resource(HUD_FONT)));
 		}
 
+		// Server chat of the popup under the mouse
+		ChatChannels.Channel popupAt(double mouseX, double mouseY) {
+			if (!this.expanded) {
+				return null;
+			}
+			int y = getY();
+			for (ChatChannels.Channel option : ChatChannels.others()) {
+				y -= ICON_SIZE + POPUP_GAP;
+				if (mouseX >= getX() && mouseX < getX() + width(hud(option.label)) && mouseY >= y && mouseY < y + ICON_SIZE) {
+					return option;
+				}
+			}
+			return null;
+		}
+
+		private boolean overPopup(double mouseX, double mouseY) {
+			if (!this.expanded) {
+				return false;
+			}
+			java.util.List<ChatChannels.Channel> others = ChatChannels.others();
+			int right = getX() + getWidth();
+			for (ChatChannels.Channel option : others) {
+				right = Math.max(right, getX() + width(hud(option.label)));
+			}
+			int top = getY() - others.size() * (ICON_SIZE + POPUP_GAP);
+			return mouseX >= getX() && mouseX < right && mouseY >= top && mouseY < getY();
+		}
+
+		private boolean selected() {
+			return switch (this.channel) {
+				case ROOM -> ModChat.active == NORMAL && this.room.name().equals(ChatChannels.room());
+				case NORMAL -> ModChat.active == NORMAL && ChatChannels.room() == null;
+				default -> ModChat.active == this.channel;
+			};
+		}
+
 		@Override
 		protected void extractWidgetRenderState(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float partialTick) {
 			Font font = Minecraft.getInstance().font;
 			Component label = label();
-			setWidth(font.width(label) + ICON_WIDTH + PADDING * 2 + ICON_GAP);
-			if (this.staff && button != null) {
-				setX(button.getX() + button.getWidth() + STACK_GAP + button.unreadWidth(font));
+			setWidth(width(label));
+			if (this.previous != null) {
+				setX(this.previous.getX() + this.previous.getWidth() + STACK_GAP + this.previous.unreadWidth(font));
 			}
 			int x = getX();
 			int y = getY();
-			int color = this.staff ? STAFF_COLOR : COLOR;
-			boolean selected = ModChat.active == (this.staff ? STAFF : MCCINFO);
-			int background = selected ? shade(color, isHovered() ? 0.9F : 0.8F, 0xFF) : shade(color, isHovered() ? 0.5F : 0.25F, 0x80);
-			OverlayStyle.fillRounded(graphics, x, y, this.width, this.height, background);
-			graphics.blit(RenderPipelines.GUI_TEXTURED, ICON, x + PADDING, y + 1, this.staff ? ICON_CELL : 0.0F, ICON_V, ICON_WIDTH, ICON_HEIGHT, ICON_TEXTURE, ICON_TEXTURE);
-			graphics.text(font, label, x + PADDING + ICON_WIDTH + ICON_GAP, y, 0xFFFFFFFF, false);
-			int count = unreadCount();
+			// Other server chats above the button, on hover
+			if (this.channel == NORMAL) {
+				this.expanded = isHovered() || overPopup(mouseX, mouseY);
+				if (this.expanded) {
+					ChatChannels.Channel hovered = popupAt(mouseX, mouseY);
+					int optionY = y;
+					for (ChatChannels.Channel option : ChatChannels.others()) {
+						optionY -= ICON_SIZE + POPUP_GAP;
+						extractEntry(graphics, font, x, optionY, hud(option.label), option.color, ICONS, ICONS_TEXTURE, option.u, option.v, false, option == hovered);
+					}
+					if (hovered != null) {
+						NeuItems.pointer(graphics);
+					}
+				}
+			}
+			boolean room = this.channel == ROOM;
+			boolean hovered = isHovered() && (!room || serverButton == null || !serverButton.overPopup(mouseX, mouseY));
+			ItemStack icon = room ? ChatRoomIcons.icon(this.room.name()) : ItemStack.EMPTY;
+			extractEntry(graphics, font, x, y, label, color(), !icon.isEmpty() ? null : room ? ROOM_ICONS : ICONS, room ? ROOM_ICONS_TEXTURE : ICONS_TEXTURE, u(), v(), selected(), hovered);
+			if (!icon.isEmpty()) {
+				ChatRoomIcons.extractButtonIcon(graphics, icon, x, y);
+			}
+			if (hovered && room) {
+				NeuItems.pointer(graphics);
+			}
 			// Unread badge
+			int count = unreadCount();
 			if (count > 0) {
 				Component countText = hud(String.valueOf(count));
 				int countX = x + this.width + STACK_GAP;
-				OverlayStyle.fillRounded(graphics, countX, y, font.width(countText) - 1 + PADDING * 2, this.height, UNREAD_COLOR);
-				graphics.text(font, countText, countX + PADDING, y, 0xFFFFFFFF, false);
+				OverlayStyle.fillRounded(graphics, countX, y + PILL_TOP, font.width(countText) - 1 + PADDING * 2, PILL_HEIGHT, UNREAD_COLOR);
+				graphics.text(font, countText, countX + PADDING, y + PILL_TOP, 0xFFFFFFFF, false);
 			}
+		}
+
+		private static void extractEntry(GuiGraphicsExtractor graphics, Font font, int x, int y, Component label, int color, Identifier texture, int textureSize, int u, int v, boolean selected, boolean hovered) {
+			int background = selected ? shade(color, hovered ? 0.9F : 0.8F, 0xFF) : shade(color, hovered ? 0.5F : 0.25F, 0xC0);
+			OverlayStyle.fillRounded(graphics, x + PILL_LEFT, y + PILL_TOP, width(label) - PILL_LEFT, PILL_HEIGHT, background);
+			if (texture != null) {
+				graphics.blit(RenderPipelines.GUI_TEXTURED, texture, x, y, u, v, ICON_SIZE, ICON_SIZE, textureSize, textureSize);
+			}
+			graphics.text(font, label, x + ICON_SIZE + TEXT_GAP, y + PILL_TOP, 0xFFFFFFFF, false);
 		}
 
 		private static int shade(int color, float factor, int alpha) {

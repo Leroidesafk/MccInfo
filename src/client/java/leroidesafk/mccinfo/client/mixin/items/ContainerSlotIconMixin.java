@@ -35,6 +35,7 @@ public class ContainerSlotIconMixin {
 		CarnivalTicketOverlay.extractIslandIcon(graphics, slot);
 		FishCollection.extractCheckIcon(graphics, slot);
 		BestIsland.extractBestIcon(graphics, slot);
+		leroidesafk.mccinfo.client.items.CrateChances.extractBestIcon(graphics, slot);
 		BestIsland.extractUpgradeIcon(graphics, slot);
 		IslandWinds.extractIcons(graphics, slot);
 		SlotIndicators.extractItemIndicators(graphics, slot);

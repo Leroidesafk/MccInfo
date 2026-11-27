@@ -60,6 +60,12 @@ public final class ChatCopy {
 			MOUSE.set(Float.NaN, Float.NaN);
 			return;
 		}
+		// Nothing hovered behind the chat buttons
+		if (ModChat.overButtons(mouseX, mouseY)) {
+			hovered = null;
+			MOUSE.set(Float.NaN, Float.NaN);
+			return;
+		}
 		// Mouse in chat coordinates
 		float scale = client.options.chatScale().get().floatValue();
 		Matrix3x2f pose = new Matrix3x2f(graphics.pose()).scale(scale, scale).translate(4.0F, 0.0F);

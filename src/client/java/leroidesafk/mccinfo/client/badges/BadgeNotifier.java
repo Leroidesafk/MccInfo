@@ -3,17 +3,11 @@ package leroidesafk.mccinfo.client.badges;
 import leroidesafk.mccinfo.client.MccIsland;
 import leroidesafk.mccinfo.client.ModConfig;
 import leroidesafk.mccinfo.client.chat.MccApi;
-import leroidesafk.mccinfo.client.gui.OverlayStyle;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.Font;
-import net.minecraft.client.gui.GuiGraphicsExtractor;
-import net.minecraft.client.gui.components.toasts.Toast;
-import net.minecraft.client.gui.components.toasts.ToastManager;
 import net.minecraft.client.resources.sounds.SimpleSoundInstance;
 import net.minecraft.network.chat.Component;
 import net.minecraft.sounds.SoundEvents;
-import net.minecraft.world.item.ItemStack;
 
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -169,7 +163,7 @@ public final class BadgeNotifier {
 		Minecraft client = Minecraft.getInstance();
 		Component title = Component.translatable("toast.mccinfo.badges.title", mode.name(), Badges.levelName(popularity.toLowerCase(Locale.ROOT)));
 		Component line = badge == null ? Component.translatable("screen.mccinfo.badges.title") : line(badge);
-		client.gui.toastManager().addToast(new PopularityToast(Badges.modeIcon(mode), title, line));
+		client.gui.toastManager().addToast(new leroidesafk.mccinfo.client.gui.IconToast(Badges.modeIcon(mode), title, line));
 		if (ModConfig.get().badgeNotifySound) {
 			client.getSoundManager().play(SimpleSoundInstance.forUI(SoundEvents.NOTE_BLOCK_PLING, SOUND_PITCH));
 		}
@@ -188,62 +182,5 @@ public final class BadgeNotifier {
 			}
 		}
 		return text.toString();
-	}
-
-	// Toast with the mode icon
-	private static final class PopularityToast implements Toast {
-		private static final int MIN_WIDTH = 160;
-		private static final int MAX_WIDTH = 300;
-		private static final int TEXT_RIGHT = 8;
-		private static final int HEIGHT = 26;
-		private static final int BACKGROUND_COLOR = 0xC0111111;
-		private static final int TEXT_LEFT = 26;
-		private static final int TITLE_COLOR = 0xFFFFD24A;
-		private static final long DISPLAY_MILLIS = 8000L;
-
-		private final ItemStack icon;
-		private final Component title;
-		private final Component line;
-		private final int width;
-		private Visibility wantedVisibility = Visibility.HIDE;
-
-		private PopularityToast(ItemStack icon, Component title, Component line) {
-			this.icon = icon;
-			this.title = title;
-			this.line = line;
-			Font font = Minecraft.getInstance().font;
-			int text = Math.max(font.width(title), font.width(line));
-			this.width = Math.clamp(TEXT_LEFT + text + TEXT_RIGHT, MIN_WIDTH, MAX_WIDTH);
-		}
-
-		@Override
-		public int width() {
-			return this.width;
-		}
-
-		@Override
-		public int height() {
-			return HEIGHT;
-		}
-
-		@Override
-		public Visibility getWantedVisibility() {
-			return this.wantedVisibility;
-		}
-
-		@Override
-		public void update(ToastManager manager, long visibleMillis) {
-			this.wantedVisibility = visibleMillis > DISPLAY_MILLIS * manager.getNotificationDisplayTimeMultiplier() ? Visibility.HIDE : Visibility.SHOW;
-		}
-
-		@Override
-		public void extractRenderState(GuiGraphicsExtractor graphics, Font font, long visibleMillis) {
-			OverlayStyle.fillRounded(graphics, 1, 2, this.width - 3, HEIGHT - 2, BACKGROUND_COLOR);
-			if (!this.icon.isEmpty()) {
-				graphics.fakeItem(this.icon, 5, 6);
-			}
-			graphics.text(font, this.title, TEXT_LEFT, 6, TITLE_COLOR);
-			graphics.text(font, font.substrByWidth(this.line, this.width - TEXT_LEFT - TEXT_RIGHT).getString(), TEXT_LEFT, 15, 0xFFFFFFFF);
-		}
 	}
 }

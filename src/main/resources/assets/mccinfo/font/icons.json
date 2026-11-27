@@ -221,11 +221,12 @@
     },
     {
       "type": "bitmap",
-      "file": "mccinfo:gui/ui/mid_click.png",
+      "file": "mccinfo:gui/ui/click.png",
       "ascent": 7,
       "height": 8,
       "chars": [
-        ""
+        "",
+        ""
       ]
     },
     {

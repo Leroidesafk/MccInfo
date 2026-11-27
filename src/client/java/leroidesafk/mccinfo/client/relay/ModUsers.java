@@ -1,17 +1,21 @@
 package leroidesafk.mccinfo.client.relay;
 
+import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import leroidesafk.mccinfo.Mccinfo;
 import leroidesafk.mccinfo.client.ModConfig;
+import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
+import net.minecraft.client.multiplayer.ClientPacketListener;
 import net.minecraft.client.multiplayer.PlayerInfo;
 import net.minecraft.client.renderer.RenderPipelines;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.Style;
 import net.minecraft.resources.Identifier;
+import net.minecraft.world.entity.player.Player;
 
 import com.mojang.blaze3d.platform.NativeImage;
 import net.minecraft.client.renderer.texture.DynamicTexture;
@@ -19,9 +23,12 @@ import net.minecraft.client.renderer.texture.DynamicTexture;
 import java.io.IOException;
 import java.util.Base64;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Locale;
 import java.util.Optional;
 import java.util.Map;
+import java.util.Set;
+import java.util.regex.Pattern;
 
 public final class ModUsers {
 	// Tab row and hidden badge color
@@ -38,6 +45,13 @@ public final class ModUsers {
 	private static Map<String, Badge> users = Map.of();
 	private static Map<String, Icon> icons = Map.of();
 
+	// Names watched on the relay
+	private static final Pattern NAME = Pattern.compile("[A-Za-z0-9_]{3,16}");
+	private static final int MAX_WATCHED = 500;
+	private static final int WATCH_INTERVAL = 20;
+	private static Set<String> watched = Set.of();
+	private static int watchTicks;
+
 	private ModUsers() {
 	}
 
@@ -50,6 +64,80 @@ public final class ModUsers {
 		SpotSync.addHandler("mod_users", ModUsers::receive);
 		SpotSync.addHandler("tab_icons", object -> Minecraft.getInstance().execute(() -> receiveIcons(object)));
 		ClientPlayConnectionEvents.DISCONNECT.register((handler, client) -> users = Map.of());
+		ClientTickEvents.END_CLIENT_TICK.register(ModUsers::tickWatch);
+		SpotSync.onResend(() -> Minecraft.getInstance().execute(() -> sendWatch(visibleNames(Minecraft.getInstance()), true)));
+	}
+
+	// Relay told when the visible players change
+	private static void tickWatch(Minecraft client) {
+		if (++watchTicks < WATCH_INTERVAL) {
+			return;
+		}
+		watchTicks = 0;
+		Set<String> names = visibleNames(client);
+		if (!names.equals(watched) && SpotSync.connected()) {
+			sendWatch(names, false);
+		}
+	}
+
+	// Own player, Tab and players around
+	private static Set<String> visibleNames(Minecraft client) {
+		Set<String> names = new HashSet<>();
+		if (client.player != null) {
+			addName(names, client.player.getGameProfile().name());
+		}
+		ClientPacketListener connection = client.getConnection();
+		if (connection != null) {
+			for (PlayerInfo info : connection.getOnlinePlayers()) {
+				addName(names, info.getProfile().name());
+				Component display = info.getTabListDisplayName();
+				if (display != null) {
+					display.visit((style, text) -> {
+						addName(names, text.strip());
+						return Optional.empty();
+					}, Style.EMPTY);
+				}
+			}
+		}
+		if (client.level != null) {
+			for (Player player : client.level.players()) {
+				addName(names, player.getGameProfile().name());
+			}
+		}
+		return names;
+	}
+
+	private static void addName(Set<String> names, String name) {
+		if (name != null && names.size() < MAX_WATCHED && NAME.matcher(name).matches()) {
+			names.add(name.toLowerCase(Locale.ROOT));
+		}
+	}
+
+	// Added and removed names, or the whole list on reset
+	private static void sendWatch(Set<String> names, boolean reset) {
+		JsonObject message = new JsonObject();
+		message.addProperty("type", "mod_users_watch");
+		JsonArray add = new JsonArray();
+		JsonArray remove = new JsonArray();
+		for (String name : names) {
+			if (reset || !watched.contains(name)) {
+				add.add(name);
+			}
+		}
+		if (reset) {
+			message.addProperty("reset", true);
+		} else {
+			for (String name : watched) {
+				if (!names.contains(name)) {
+					remove.add(name);
+				}
+			}
+			message.add("remove", remove);
+		}
+		message.add("add", add);
+		if (SpotSync.sendMessage(message)) {
+			watched = Set.copyOf(names);
+		}
 	}
 
 	private static void receive(JsonObject object) {

@@ -72,7 +72,6 @@ final class EmoteShockwave {
 		return (System.nanoTime() - this.bornNanos) / 1.0E9 / LIFE_SECONDS;
 	}
 
-	// World image copied before the waves
 	static boolean prepare() {
 		RenderTarget target = Minecraft.getInstance().gameRenderer.mainRenderTarget();
 		GpuTexture source = target.getColorTexture();
@@ -85,7 +84,7 @@ final class EmoteShockwave {
 		}
 		scene.fit(source);
 		pending = true;
-		return true;
+		return scene.copied;
 	}
 
 	static void copyScene() {
@@ -135,8 +134,9 @@ final class EmoteShockwave {
 				.setUv(u, v).setColor(color);
 	}
 
-	// Copy of the world image
 	private static final class Scene extends AbstractTexture {
+		private boolean copied;
+
 		Scene() {
 			this.sampler = RenderSystem.getSamplerCache().getSampler(AddressMode.CLAMP_TO_EDGE, AddressMode.CLAMP_TO_EDGE, FilterMode.LINEAR,
 					FilterMode.LINEAR, false);
@@ -150,6 +150,7 @@ final class EmoteShockwave {
 				return;
 			}
 			this.releaseTextures();
+			this.copied = false;
 			GpuDevice device = RenderSystem.getDevice();
 			this.texture = device.createTexture("mccinfo emote shockwave scene", GpuTexture.USAGE_COPY_DST | GpuTexture.USAGE_TEXTURE_BINDING,
 					source.getFormat(), width, height, 1, 1);
@@ -162,6 +163,7 @@ final class EmoteShockwave {
 			}
 			RenderSystem.getDevice().createCommandEncoder().copyTextureToTexture(source, this.texture, 0, 0, 0, 0, 0, source.getWidth(0),
 					source.getHeight(0));
+			this.copied = true;
 		}
 	}
 }

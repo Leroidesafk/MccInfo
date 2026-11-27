@@ -25,11 +25,12 @@ import net.minecraft.world.scores.Scoreboard;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.DayOfWeek;
 import java.time.Instant;
-import java.time.LocalDate;
 import java.time.LocalTime;
 import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
+import java.time.temporal.TemporalAdjusters;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -53,6 +54,7 @@ public final class ParkourLimits {
 	private static final Pattern COURSE = Pattern.compile("Course #(\\d+)", Pattern.CASE_INSENSITIVE);
 	private static final Pattern DAILY_NUMBER = Pattern.compile("Daily Challenge #([\\d,]+)", Pattern.CASE_INSENSITIVE);
 	private static final LocalTime RESET_TIME = LocalTime.of(10, 0);
+	private static final DayOfWeek RESET_DAY = DayOfWeek.TUESDAY;
 
 	// Course or daily challenge and its reset time
 	public static final class Limit {
@@ -109,7 +111,14 @@ public final class ParkourLimits {
 					loaded.limits = new ArrayList<>();
 				}
 				long now = System.currentTimeMillis();
-				loaded.limits.removeIf(limit -> limit == null || limit.course == null || limit.resetAt <= now);
+				loaded.limits.removeIf(limit -> limit == null || limit.course == null);
+				// Old limits capped to the weekly reset
+				for (Limit limit : loaded.limits) {
+					if (!DAILY.equals(limit.course)) {
+						limit.resetAt = Math.min(limit.resetAt, weeklyReset(limit.hitAt));
+					}
+				}
+				loaded.limits.removeIf(limit -> limit.resetAt <= now);
 				saved = loaded;
 			}
 		} catch (IOException | JsonParseException e) {
@@ -121,7 +130,7 @@ public final class ParkourLimits {
 		AsyncFiles.write(PATH, GSON.toJson(saved));
 	}
 
-	// Resets at 10:00 UTC, daily or on the 1st of the month
+	// Next daily reset, 10:00 UTC
 	static long dailyReset(long hitAt) {
 		ZonedDateTime time = Instant.ofEpochMilli(hitAt).atZone(ZoneOffset.UTC);
 		ZonedDateTime reset = time.toLocalDate().atTime(RESET_TIME).atZone(ZoneOffset.UTC);
@@ -131,12 +140,12 @@ public final class ParkourLimits {
 		return reset.toInstant().toEpochMilli();
 	}
 
-	static long monthlyReset(long hitAt) {
+	// Next weekly reset, Tuesday 10:00 UTC
+	static long weeklyReset(long hitAt) {
 		ZonedDateTime time = Instant.ofEpochMilli(hitAt).atZone(ZoneOffset.UTC);
-		LocalDate first = time.toLocalDate().withDayOfMonth(1);
-		ZonedDateTime reset = first.atTime(RESET_TIME).atZone(ZoneOffset.UTC);
+		ZonedDateTime reset = time.toLocalDate().with(TemporalAdjusters.nextOrSame(RESET_DAY)).atTime(RESET_TIME).atZone(ZoneOffset.UTC);
 		if (!reset.isAfter(time)) {
-			reset = first.plusMonths(1).atTime(RESET_TIME).atZone(ZoneOffset.UTC);
+			reset = reset.plusWeeks(1);
 		}
 		return reset.toInstant().toEpochMilli();
 	}
@@ -163,7 +172,7 @@ public final class ParkourLimits {
 		}
 		Matcher monthly = COURSE.matcher(course);
 		if (monthly.find()) {
-			record(new Limit(monthly.group(1), 0, now, resetIn > 0 ? snap(now + resetIn) : monthlyReset(now)));
+			record(new Limit(monthly.group(1), 0, now, resetIn > 0 ? snap(now + resetIn) : weeklyReset(now)));
 			return;
 		}
 		Mccinfo.LOGGER.info("Parkour XP limit message seen, unknown course \"{}\"", course);

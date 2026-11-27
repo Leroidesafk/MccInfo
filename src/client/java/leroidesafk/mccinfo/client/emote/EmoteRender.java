@@ -33,12 +33,12 @@ final class EmoteRender {
 	// Full light and hidden bones
 	static final int FULL_BRIGHT = 0xF000F0;
 	private static final float HIDDEN = 1.0E-6F;
-	// Glowing parts: no light, no shading
 	private static final RenderPipeline GLOW_PIPELINE = RenderPipeline.builder(RenderPipelines.ENTITY_EMISSIVE_SNIPPET)
 			.withLocation(Mccinfo.id("pipeline/emote_glow"))
 			.withShaderDefine("ALPHA_CUTOUT", 0.1F)
 			.withShaderDefine("NO_CARDINAL_LIGHTING")
 			.withBindGroupLayout(BindGroupLayouts.SAMPLER1)
+			.withColorTargetState(ColorTargetState.DEFAULT)
 			.build();
 	private static final Function<Identifier, RenderType> GLOW = Util.memoize(texture -> RenderTypeAccessor.mccinfo$create("mccinfo_emote_glow",
 			RenderSetup.builder(GLOW_PIPELINE).withTexture("Sampler0", texture).useOverlay().createRenderSetup()));

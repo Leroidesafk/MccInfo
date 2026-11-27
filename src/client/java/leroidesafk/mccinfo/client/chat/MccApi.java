@@ -71,6 +71,8 @@ public final class MccApi {
 	private static final String FISH_SELECTION = "player(uuid: \"%s\") { collections { fish { fish { name "
 			+ "AVERAGE: trophies(weight: AVERAGE) LARGE: trophies(weight: LARGE) MASSIVE: trophies(weight: MASSIVE) "
 			+ "GARGANTUAN: trophies(weight: GARGANTUAN) COLOSSAL: trophies(weight: COLOSSAL) } weights { weight } } } }";
+	private static final String OWNED_SELECTION = "player(uuid: \"%s\") { collections { cosmetics { cosmetic { name } owned } } }";
+	private static final String DONATIONS_SELECTION = "player(uuid: \"%s\") { collections { cosmetics { cosmetic { name royalReputation { donationLimit } } donationsMade } } }";
 	private static final List<String> FISH_WEIGHTS = List.of("AVERAGE", "LARGE", "MASSIVE", "GARGANTUAN", "COLOSSAL");
 	private static final HttpClient HTTP = HttpClient.newBuilder().connectTimeout(TIMEOUT).build();
 	private static final Map<String, Cached> CACHE = new ConcurrentHashMap<>();
@@ -274,6 +276,98 @@ public final class MccApi {
 			}
 			return readFish(reply.value());
 		});
+	}
+
+	// Owned cosmetics of the own player
+	public static CompletableFuture<Map<String, Boolean>> ownedCosmetics() {
+		if (!hasKey()) {
+			return CompletableFuture.completedFuture(null);
+		}
+		return query(String.format(OWNED_SELECTION, own())).handle((reply, error) -> {
+			if (reply == null || reply.status() != 200) {
+				if (reply != null && (reply.status() == 401 || reply.status() == 403)) {
+					Minecraft.getInstance().execute(() -> setState(KeyState.INVALID));
+				}
+				return null;
+			}
+			return readOwned(reply.value());
+		});
+	}
+
+	private static Map<String, Boolean> readOwned(JsonElement value) {
+		try {
+			if (value == null || !value.isJsonObject() || !(value.getAsJsonObject().get("collections") instanceof JsonObject collections)
+					|| !collections.has("cosmetics") || !collections.get("cosmetics").isJsonArray()) {
+				return null;
+			}
+			Map<String, Boolean> owned = new HashMap<>();
+			for (JsonElement element : collections.getAsJsonArray("cosmetics")) {
+				if (!element.isJsonObject() || !(element.getAsJsonObject().get("cosmetic") instanceof JsonObject cosmetic) || !cosmetic.has("name")
+						|| !cosmetic.get("name").isJsonPrimitive()) {
+					continue;
+				}
+				JsonObject state = element.getAsJsonObject();
+				boolean has = state.has("owned") && state.get("owned").isJsonPrimitive() && state.get("owned").getAsBoolean();
+				owned.merge(cosmetic.get("name").getAsString().strip().toLowerCase(Locale.ROOT), has, Boolean::logicalOr);
+			}
+			return Map.copyOf(owned);
+		} catch (RuntimeException e) {
+			Mccinfo.LOGGER.warn("MCC Island API: unreadable cosmetics ({})", e.toString());
+			return null;
+		}
+	}
+
+	// Royal Reputation donations of the own player
+	public record Donation(int made, int limit) {
+		public boolean maxed() {
+			return this.limit > 0 && this.made >= this.limit;
+		}
+	}
+
+	public static CompletableFuture<Map<String, Donation>> donations() {
+		if (!hasKey()) {
+			return CompletableFuture.completedFuture(null);
+		}
+		return query(String.format(DONATIONS_SELECTION, own())).handle((reply, error) -> {
+			if (reply == null || reply.status() != 200) {
+				if (reply != null && (reply.status() == 401 || reply.status() == 403)) {
+					Minecraft.getInstance().execute(() -> setState(KeyState.INVALID));
+				}
+				return null;
+			}
+			return readDonations(reply.value());
+		});
+	}
+
+	private static Map<String, Donation> readDonations(JsonElement value) {
+		try {
+			if (value == null || !value.isJsonObject() || !value.getAsJsonObject().has("collections") || !value.getAsJsonObject().get("collections").isJsonObject()) {
+				return null;
+			}
+			JsonObject collections = value.getAsJsonObject().getAsJsonObject("collections");
+			if (!collections.has("cosmetics") || !collections.get("cosmetics").isJsonArray()) {
+				return null;
+			}
+			Map<String, Donation> donations = new HashMap<>();
+			for (JsonElement element : collections.getAsJsonArray("cosmetics")) {
+				if (!element.isJsonObject() || !element.getAsJsonObject().has("cosmetic") || !element.getAsJsonObject().get("cosmetic").isJsonObject()) {
+					continue;
+				}
+				JsonObject state = element.getAsJsonObject();
+				JsonObject cosmetic = state.getAsJsonObject("cosmetic");
+				if (!cosmetic.has("name") || !cosmetic.get("name").isJsonPrimitive() || !cosmetic.has("royalReputation") || !cosmetic.get("royalReputation").isJsonObject()) {
+					continue;
+				}
+				JsonObject royal = cosmetic.getAsJsonObject("royalReputation");
+				int limit = royal.has("donationLimit") && royal.get("donationLimit").isJsonPrimitive() ? royal.get("donationLimit").getAsInt() : 0;
+				int made = state.has("donationsMade") && state.get("donationsMade").isJsonPrimitive() ? state.get("donationsMade").getAsInt() : 0;
+				donations.put(cosmetic.get("name").getAsString().strip().toLowerCase(Locale.ROOT), new Donation(made, limit));
+			}
+			return Map.copyOf(donations);
+		} catch (RuntimeException e) {
+			Mccinfo.LOGGER.warn("MCC Island API: unreadable donations ({})", e.toString());
+			return null;
+		}
 	}
 
 	private static FishRecords readFish(JsonElement value) {

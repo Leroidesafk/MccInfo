@@ -353,7 +353,7 @@ public final class SettingsPages {
 						config.save();
 					})));
 		}
-		// Chat Ping, emojis and MccInfo chat
+		// Chat Ping, emojis, server chats and MccInfo chat
 		List<SettingsPanel.Card> chat = new ArrayList<>();
 		if (utilsPerm) chat.add(SettingsPanel.Card.of("chat_ping", text("screen.mccinfo.settings.chat_ping"),
 				text("screen.mccinfo.settings.chat_ping.description"),
@@ -393,6 +393,25 @@ public final class SettingsPages {
 					config.autoEmojis = value;
 					config.save();
 				})));
+		// Server Chats, Focus Reply and Focus Chat Rooms
+		if (utilsPerm) chat.add(SettingsPanel.Card.of("server_chats", text("screen.mccinfo.settings.server_chats"),
+				text("screen.mccinfo.settings.server_chats.description"),
+				toggle(() -> config.serverChats, value -> {
+					config.serverChats = value;
+					config.save();
+				})));
+		if (utilsPerm && config.serverChats) chat.add(SettingsPanel.Card.child("focus_reply", text("screen.mccinfo.settings.focus_reply"),
+				text("screen.mccinfo.settings.focus_reply.description"),
+				toggle(() -> config.focusReply, value -> {
+					config.focusReply = value;
+					config.save();
+				})));
+		if (utilsPerm && config.serverChats) chat.add(SettingsPanel.Card.child("room_chats", text("screen.mccinfo.settings.room_chats"),
+				text("screen.mccinfo.settings.room_chats.description"),
+				toggle(() -> config.roomChats, value -> {
+					config.roomChats = value;
+					config.save();
+				})));
 		if (utilsPerm) chat.add(SettingsPanel.Card.of("mod_chat", text("screen.mccinfo.settings.mod_chat"),
 				text("screen.mccinfo.settings.mod_chat.description"),
 				toggle(() -> config.modChat, value -> {
@@ -401,20 +420,6 @@ public final class SettingsPages {
 					ModChat.settingsChanged();
 				})));
 		if (utilsPerm && config.modChat) {
-			chat.add(SettingsPanel.Card.child("mod_chat_notify", text("screen.mccinfo.settings.mod_chat_notify"),
-					text("screen.mccinfo.settings.mod_chat_notify.description"),
-					toggle(() -> config.modChatNotify, value -> {
-						config.modChatNotify = value;
-						config.save();
-					})));
-			if (config.modChatNotify && Permissions.isStaff()) {
-				chat.add(SettingsPanel.Card.grandchild("mod_chat_notify_channel", text("screen.mccinfo.settings.mod_chat_notify_channel"),
-						text("screen.mccinfo.settings.mod_chat_notify_channel.description"),
-						dropdown(() -> boxChannelName(config.modChatNotifyChannel), BOX_CHANNELS, SettingsPages::boxChannelName, value -> {
-							config.modChatNotifyChannel = value;
-							config.save();
-						})));
-			}
 			chat.add(SettingsPanel.Card.child("mod_chat_box", text("screen.mccinfo.settings.mod_chat_box"),
 					text("screen.mccinfo.settings.mod_chat_box.description"),
 					toggle(() -> config.modChatBox, value -> {
@@ -470,6 +475,28 @@ public final class SettingsPages {
 					config.maxedCosmeticIcon = value;
 					config.save();
 				})));
+		// Wardrobe donations and crate chances, need the API key
+		if (utilsPerm) {
+			MccApi.KeyState donationKey = MccApi.state();
+			display.add(donationKey == MccApi.KeyState.NONE || donationKey == MccApi.KeyState.INVALID
+					? SettingsPanel.Card.warning("wardrobe_donation_icon", text("screen.mccinfo.settings.wardrobe_donation_icon"),
+							text("screen.mccinfo.settings.wardrobe_donation_icon.no_key"))
+					: SettingsPanel.Card.of("wardrobe_donation_icon", text("screen.mccinfo.settings.wardrobe_donation_icon"),
+							text("screen.mccinfo.settings.wardrobe_donation_icon.description"),
+							toggle(() -> config.wardrobeDonationIcon, value -> {
+								config.wardrobeDonationIcon = value;
+								config.save();
+							})));
+			display.add(donationKey == MccApi.KeyState.NONE || donationKey == MccApi.KeyState.INVALID
+					? SettingsPanel.Card.warning("crate_chances", text("screen.mccinfo.settings.crate_chances"),
+							text("screen.mccinfo.settings.crate_chances.no_key"))
+					: SettingsPanel.Card.of("crate_chances", text("screen.mccinfo.settings.crate_chances"),
+							text("screen.mccinfo.settings.crate_chances.description"),
+							toggle(() -> config.crateChances, value -> {
+								config.crateChances = value;
+								config.save();
+							})));
+		}
 		if (utilsPerm) display.add(SettingsPanel.Card.of("locked_perk_icon", text("screen.mccinfo.settings.locked_perk_icon"),
 				text("screen.mccinfo.settings.locked_perk_icon.description"),
 				toggle(() -> config.lockedPerkIcon, value -> {
@@ -486,6 +513,44 @@ public final class SettingsPages {
 				text("screen.mccinfo.settings.better_item_amounts.description"),
 				toggle(() -> config.betterItemAmounts, value -> {
 					config.betterItemAmounts = value;
+					config.save();
+				})));
+		// Navigator players and Blueprint Assembler
+		if (utilsPerm) display.add(SettingsPanel.Card.of("player_numbers", text("screen.mccinfo.settings.player_numbers"),
+				text("screen.mccinfo.settings.player_numbers.description"),
+				toggle(() -> config.playerNumbers, value -> {
+					config.playerNumbers = value;
+					config.save();
+				})));
+		if (utilsPerm) display.add(SettingsPanel.Card.of("assembler_on_top", text("screen.mccinfo.settings.assembler_on_top"),
+				text("screen.mccinfo.settings.assembler_on_top.description"),
+				toggle(() -> config.assemblerOnTop, value -> {
+					config.assemblerOnTop = value;
+					config.save();
+				})));
+		// Forge and Assembler Notification and its options
+		if (utilsPerm) display.add(SettingsPanel.Card.of("craft_notify", text("screen.mccinfo.settings.craft_notify"),
+				text("screen.mccinfo.settings.craft_notify.description"),
+				toggle(() -> config.craftNotify, value -> {
+					config.craftNotify = value;
+					config.save();
+				})));
+		if (utilsPerm && config.craftNotify) display.add(SettingsPanel.Card.child("craft_notify_toast", text("screen.mccinfo.settings.craft_notify_toast"),
+				text("screen.mccinfo.settings.craft_notify_toast.description"),
+				toggle(() -> config.craftNotifyToast, value -> {
+					config.craftNotifyToast = value;
+					config.save();
+				})));
+		if (utilsPerm && config.craftNotify) display.add(SettingsPanel.Card.child("craft_notify_chat", text("screen.mccinfo.settings.craft_notify_chat"),
+				text("screen.mccinfo.settings.craft_notify_chat.description"),
+				toggle(() -> config.craftNotifyChat, value -> {
+					config.craftNotifyChat = value;
+					config.save();
+				})));
+		if (utilsPerm && config.craftNotify) display.add(SettingsPanel.Card.child("craft_notify_sound", text("screen.mccinfo.settings.craft_notify_sound"),
+				text("screen.mccinfo.settings.craft_notify_sound.description"),
+				toggle(() -> config.craftNotifySound, value -> {
+					config.craftNotifySound = value;
 					config.save();
 				})));
 		if (utilsPerm) display.add(SettingsPanel.Card.of("mcc_jei", text("screen.mccinfo.settings.mcc_jei"),
@@ -1003,7 +1068,7 @@ public final class SettingsPages {
 								toggle(() -> config.summerHearts, value -> config.summerHearts = value))))));
 	}
 
-	// Channels of the MccInfo chat box and notifications
+	// Channels of the MccInfo chat box
 	private static final List<String> BOX_CHANNELS = List.of("mccinfo", "mod", "both");
 
 	private static Component boxChannelName(String channel) {

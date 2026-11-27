@@ -39,7 +39,7 @@ public final class QuestLockBar {
 	private record Row(QuestLock.Task task, Box box) {
 	}
 
-	// Bar and task list layout and colors
+	// Bar and list layout
 	private static final String TITLE = "ISLAND REWARDS";
 	private static final int CELL = 20;
 	private static final int LOGO = 16;
@@ -58,7 +58,9 @@ public final class QuestLockBar {
 	private static final int TITLE_COLOR = 0xFFFFFFFF;
 	private static final int TEXT_COLOR = 0xFFA8B0B0;
 	private static final int LOCKED_TEXT_COLOR = 0xFFFFFFFF;
+	// Same size on screen above GUI Scale 3
 	private static final float SCREEN_PIXELS = 2.0F;
+	private static final int DESIGN_GUI_SCALE = 3;
 
 	// Hit areas of the last frame
 	private static List<Cell> cells = List.of();
@@ -87,7 +89,7 @@ public final class QuestLockBar {
 				&& screen.getTitle().getString().toUpperCase(Locale.ROOT).contains(TITLE);
 	}
 
-	// Bar of game logos, task list of the hovered game
+	// Bar of games and the list of the open one
 	private static void extract(Screen screen, GuiGraphicsExtractor graphics, int mouseX, int mouseY) {
 		bar = null;
 		list = null;
@@ -100,17 +102,18 @@ public final class QuestLockBar {
 		}
 		Minecraft client = Minecraft.getInstance();
 		Font font = client.font;
-		scale = Math.min(1.0F, SCREEN_PIXELS / Math.max(1, client.getWindow().getGuiScale()));
+		scale = Math.min(1.0F, SCREEN_PIXELS / Math.clamp(client.getWindow().getGuiScale(), 1, DESIGN_GUI_SCALE));
 		double scaledX = mouseX / scale;
 		double scaledY = mouseY / scale;
 		int screenWidth = (int) (screen.width / scale);
-		int screenHeight = (int) (screen.height / scale);
 		ContainerHoveredSlotAccessor menu = (ContainerHoveredSlotAccessor) screen;
 		List<QuestLock.Game> games = QuestLock.games();
 		int width = games.size() * CELL + PADDING * 2;
 		int height = CELL + PADDING * 2;
 		int x = screenWidth / 2 - width / 2;
-		int y = Math.min((int) Math.ceil((menu.mccinfo$getTopPos() + menu.mccinfo$getImageHeight()) / scale) + GAP, screenHeight - height - GAP);
+		// Kept above the Mcc JEI search bar
+		int bottom = (int) Math.floor(NeuItems.searchTop(screen) / scale);
+		int y = Math.min((int) Math.ceil((menu.mccinfo$getTopPos() + menu.mccinfo$getImageHeight()) / scale) + GAP, bottom - height - GAP);
 		bar = new Box(x, y, width, height);
 		shownOn = screen;
 		graphics.nextStratum();

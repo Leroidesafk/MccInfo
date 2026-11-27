@@ -16,6 +16,7 @@ import com.google.gson.JsonParseException;
 import leroidesafk.mccinfo.Mccinfo;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientLifecycleEvents;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
+import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.client.Minecraft;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
@@ -37,6 +38,9 @@ import java.util.concurrent.CompletionStage;
 // Connection to the relay: perms, chat, voice and every other message
 public final class SpotSync {
 	private static final int RECONNECT_DELAY_TICKS = 100;
+	// Ban by the relay
+	private static final int BANNED_CLOSE_CODE = 4003;
+	private static final int BANNED_RETRY_TICKS = 12000;
 	// Identity check: timeout, retries with backoff, delay after joining
 	private static final int AUTH_TIMEOUT_TICKS = 400;
 	private static final int AUTH_RETRY_TICKS = 100;
@@ -45,6 +49,9 @@ public final class SpotSync {
 	private static final int SEND_INTERVAL_TICKS = 20;
 	private static final Duration CONNECT_TIMEOUT = Duration.ofSeconds(10);
 	private static final int MAX_MESSAGE_CHARS = 1 << 20;
+	// Minecraft version sent in hello
+	private static final String GAME_VERSION = FabricLoader.getInstance().getModContainer("minecraft")
+			.map(container -> container.getMetadata().getVersion().getFriendlyString()).orElse("");
 
 	private static final Gson GSON = new Gson();
 
@@ -88,6 +95,8 @@ public final class SpotSync {
 	// Token to skip Mojang on the next connection
 	private static String resumeToken;
 	private static java.util.UUID resumeProfile;
+	// Key for the relay HTTP files
+	private static volatile String fileKey;
 	private static String url;
 	private static int generation;
 	private static boolean connecting;
@@ -236,6 +245,7 @@ public final class SpotSync {
 		com.google.gson.JsonObject hello = new com.google.gson.JsonObject();
 		hello.addProperty("type", "hello");
 		hello.addProperty("version", Permissions.MOD_VERSION);
+		hello.addProperty("game", GAME_VERSION);
 		sendText(Minecraft.getInstance(), hello.toString());
 		authenticated = false;
 		authTimeout = AUTH_TIMEOUT_TICKS;
@@ -255,8 +265,33 @@ public final class SpotSync {
 		}
 		connecting = false;
 		pendingServerId = null;
+		fileKey = null;
 		state = State.FAILED;
 		reconnectCooldown = RECONNECT_DELAY_TICKS;
+		RockPaperScissors.disconnected();
+	}
+
+	// Banned: no reconnect for 10 minutes
+	private static void banned(int attempt) {
+		if (attempt != generation) {
+			return;
+		}
+		generation++;
+		if (socket != null) {
+			socket.abort();
+			socket = null;
+		}
+		connecting = false;
+		pendingServerId = null;
+		resumeToken = null;
+		fileKey = null;
+		state = State.FAILED;
+		reconnectCooldown = BANNED_RETRY_TICKS;
+		Mccinfo.LOGGER.warn("Sync: banned from the relay, next try in {} minutes", BANNED_RETRY_TICKS / 1200);
+		Permissions.update(false, false, List.of(), false, null);
+		Permissions.setModerator(false);
+		ModUpdater.offer(false, null, null, null);
+		NeuItems.clear();
 		RockPaperScissors.disconnected();
 	}
 
@@ -267,6 +302,7 @@ public final class SpotSync {
 	private static void disconnect() {
 		generation++;
 		pendingServerId = null;
+		fileKey = null;
 		if (socket != null) {
 			socket.sendClose(WebSocket.NORMAL_CLOSURE, "");
 			socket = null;
@@ -287,11 +323,14 @@ public final class SpotSync {
 		});
 	}
 
+	// HTTP address of the relay, with the file key
 	public static URI httpUri(String path) {
 		try {
 			URI relay = URI.create(RELAY_URL);
 			String scheme = "wss".equalsIgnoreCase(relay.getScheme()) ? "https" : "http";
-			return new URI(scheme, null, relay.getHost(), relay.getPort(), path, relay.getQuery(), null);
+			String key = fileKey;
+			String query = key == null ? relay.getQuery() : (relay.getQuery() == null ? "" : relay.getQuery() + "&") + "session=" + key;
+			return new URI(scheme, null, relay.getHost(), relay.getPort(), path, query, null);
 		} catch (IllegalArgumentException | java.net.URISyntaxException e) {
 			return null;
 		}
@@ -487,6 +526,7 @@ public final class SpotSync {
 						}
 					}
 				}
+				case "file_key" -> fileKey = object.has("key") ? object.get("key").getAsString() : null;
 				case "resume_token" -> {
 					if (object.has("token")) {
 						resumeToken = object.get("token").getAsString();
@@ -594,7 +634,11 @@ public final class SpotSync {
 
 		@Override
 		public CompletionStage<?> onClose(WebSocket webSocket, int statusCode, String reason) {
-			this.client.execute(() -> fail(this.attempt, new IllegalStateException("closed by the server (" + statusCode + ")")));
+			if (statusCode == BANNED_CLOSE_CODE) {
+				this.client.execute(() -> banned(this.attempt));
+			} else {
+				this.client.execute(() -> fail(this.attempt, new IllegalStateException("closed by the server (" + statusCode + ")")));
+			}
 			return null;
 		}
 

@@ -130,13 +130,12 @@ public final class Emotes {
 	private Emotes() {
 	}
 
-	// Relay messages, tick, world render and wheel preview
 	public static void register() {
 		SpotSync.addHandler("emotes", EmoteLibrary::receive);
 		SpotSync.addHandler("emote_state", object -> Minecraft.getInstance().execute(() -> receiveState(object)));
 		ClientTickEvents.END_CLIENT_TICK.register(Emotes::tick);
 		LevelRenderEvents.COLLECT_SUBMITS.register(Emotes::collectSubmits);
-		LevelRenderEvents.AFTER_SOLID_FEATURES.register(context -> EmoteShockwave.copyScene());
+		LevelRenderEvents.AFTER_RENDER_PASS.register(context -> EmoteShockwave.copyScene());
 		net.fabricmc.fabric.api.client.rendering.v1.PictureInPictureRendererRegistry.register(
 				context -> new EmotePreviewRenderer(context.minecraft().getEntityRenderDispatcher()));
 	}
